@@ -126,6 +126,12 @@ class JobSearchRequest(BaseModel):
     coursework: list[str] = []
     location_preference: list[str] = []
     target_role: str = ""
+    query: str = ""
+    sources: list[str] = []
+    company: str = ""
+    location: str = ""
+    remote_only: bool = False
+    posted_within_days: int = 0
 
 class Token(BaseModel):
     access_token: str

@@ -70,10 +70,14 @@
 import { useEffect, useState } from "react";
 import { useProfile } from "@/context/ProfileContext";
 import { useGradSchool, GradProgram } from "@/hooks/use-grad-school";
+import { useNavigate } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
+import { motion } from "framer-motion";
 
 const GradPage = () => {
   const { profile } = useProfile();
   const { searchPrograms, loading } = useGradSchool();
+  const navigate = useNavigate();
 
   const [programs, setPrograms] = useState<GradProgram[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -101,6 +105,23 @@ const GradPage = () => {
 
   return (
     <div className="min-h-screen p-4 md:p-6 lg:p-8 max-w-4xl mx-auto">
+      <motion.div
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex items-center gap-3 mb-6"
+      >
+        <button
+          onClick={() => navigate("/dashboard")}
+          className="text-muted-foreground hover:text-neon transition-colors flex items-center"
+          aria-label="Back to dashboard"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <span className="font-display text-sm font-semibold text-foreground">
+          Dashboard
+        </span>
+      </motion.div>
+
       <header className="mb-6">
         <h1 className="text-2xl font-bold">Graduate School Matching</h1>
         <p className="text-muted-foreground">

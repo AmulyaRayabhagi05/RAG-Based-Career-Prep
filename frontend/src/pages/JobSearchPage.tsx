@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { ArrowLeft, MapPin, DollarSign, Briefcase, ExternalLink, X, Sparkles, Search } from "lucide-react";
+import { ArrowLeft, MapPin, DollarSign, Briefcase, ExternalLink, X, Sparkles, Search, Filter } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useProfile } from "@/context/ProfileContext";
@@ -8,6 +8,7 @@ import ResumeOptimizer from "@/components/ResumeOptimizer";
 interface Job {
   id: number;
   job_id?: string;   // backend string ID from job_search_results (e.g. "ARS-DH26-...")
+  source?: string;
   title: string;
   company: string;
   location: string;
@@ -91,27 +92,86 @@ const parseCliQuery = (raw: string) => {
   return filters;
 };
 
+const splitDescription = (description: string) => {
+  const text = (description || "").replace(/\s+/g, " ").trim();
+  if (!text) return [];
+
+  const sentences = text
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+
+  return sentences.slice(0, 6);
+};
+
+const getJobCacheKey = (profile: any, query: string, locationFilter: string, companyFilter: string, remoteOnly: boolean, recentDays: number, sourceFilters: string[]) => {
+  const payload = {
+    major: profile?.major || "",
+    target_job: profile?.target_job || "",
+    skills: profile?.skills || [],
+    coursework: profile?.coursework || [],
+    resumeText: profile?.resumeText || "",
+    query,
+    locationFilter,
+    companyFilter,
+    remoteOnly,
+    recentDays,
+    sourceFilters,
+  };
+  return `job-search-cache:${btoa(unescape(encodeURIComponent(JSON.stringify(payload))))}`;
+};
+
 const JobSearchPage = () => {
   const navigate = useNavigate();
   const { profile } = useProfile();
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [descExpanded, setDescExpanded] = useState(false);
   const [query, setQuery] = useState("");
+  const [locationFilter, setLocationFilter] = useState("");
+  const [companyFilter, setCompanyFilter] = useState("");
+  const [remoteOnly, setRemoteOnly] = useState(false);
+  const [recentDays, setRecentDays] = useState(0);
+  const [sourceFilters, setSourceFilters] = useState<string[]>([]);
   const [sort, setSort] = useState<(typeof sortOptions)[number]>("Recent + Relevant");
   const [optimizerOpen, setOptimizerOpen] = useState(false);
   const [apiJobs, setApiJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(false);
   const userSkills = profile?.skills.map((s) => s.toLowerCase()) || [];
+
+  const toggleSource = (source: string) => {
+    setSourceFilters((current) =>
+      current.includes(source) ? current.filter((item) => item !== source) : [...current, source]
+    );
+  };
+
+  const buildQueryText = () => {
+    return query
+      .replace(/-l\s+(?:"[^"]+"|[^\s-]+)/gi, "")
+      .replace(/-t\s+(?:"[^"]+"|[^\s-]+)/gi, "")
+      .replace(/-c\s+(?:"[^"]+"|[^\s-]+)/gi, "")
+      .replace(/-s\s+(?:"[^"]+"|[^\s-]+)/gi, "")
+      .trim();
+  };
+
   const fetchLiveJobs = async () => {
-    setLoading(true)
+    const cacheKey = getJobCacheKey(profile, query, locationFilter, companyFilter, remoteOnly, recentDays, sourceFilters);
+    const cachedRaw = localStorage.getItem(cacheKey);
+    let cachedJobs: Job[] = [];
+    if (cachedRaw) {
+      try {
+        cachedJobs = JSON.parse(cachedRaw);
+        if (Array.isArray(cachedJobs) && cachedJobs.length > 0) {
+          setApiJobs(cachedJobs);
+        }
+      } catch {
+        cachedJobs = [];
+      }
+    }
+
+    setLoading(cachedJobs.length === 0)
     try {
-      console.log("PROFILE SENT TO BACKEND:", {
-      skills: profile?.skills || [],
-      major: profile?.major || "",
-      coursework: profile?.coursework || [],
-      location_preference: profile?.location_preference || [],
-      target_role: query.trim() || profile?.target_job || profile?.major || "",
-    });
+      const cleanQuery = buildQueryText();
+      const parsed = parseCliQuery(query);
       const res = await fetch("http://127.0.0.1:8000/job-search", {
         method: "POST",
         headers: {
@@ -121,8 +181,17 @@ const JobSearchPage = () => {
             skills: profile?.skills || [],
             major: profile?.major || "",
             coursework: profile?.coursework || [],
-            location_preference: profile?.location_preference || [],
-            target_role: query.trim() || profile?.target_job || profile?.major || "",
+            location_preference: parsed.location ? [parsed.location, ...(profile?.location_preference || [])] : (profile?.location_preference || []),
+            target_role: cleanQuery || profile?.target_job || profile?.major || "",
+            query: cleanQuery,
+            sources: sourceFilters,
+            company: companyFilter,
+            location: locationFilter || parsed.location || "",
+            remote_only: remoteOnly,
+            posted_within_days: recentDays,
+          resumeText: profile?.resumeText || "",
+          current_role: profile?.current_role || "",
+          current_org: profile?.current_org || "",
           }),
       });
 
@@ -147,9 +216,11 @@ const JobSearchPage = () => {
           : 0,
         url: j.url,
         matched_skills: j.matched_skills || [],
+        source: j.source,
       }));
-      
-    setApiJobs(mapped);
+
+      setApiJobs(mapped);
+      localStorage.setItem(cacheKey, JSON.stringify(mapped));
   } catch (e) {
     console.error(e);
   } finally {
@@ -159,16 +230,21 @@ const JobSearchPage = () => {
 
 useEffect(() => {
   fetchLiveJobs();
-}, []);
+}, [profile?.major, profile?.target_job, profile?.resumeText]);
 
   const filteredJobs = useMemo(() => {
     const f = parseCliQuery(query);
     let jobs = apiJobs.filter((j) => {
-      if (f.location && !j.location.toLowerCase().includes(f.location)) return false;
-      if (f.type && !j.type.toLowerCase().includes(f.type)) return false;
-      if (f.company && !j.company.toLowerCase().includes(f.company)) return false;
-      if (f.skills && !f.skills.every((sk) => j.skills.some((js) => js.toLowerCase().includes(sk)))) return false;
-      //if (f.text && !(j.title + j.company + j.description).toLowerCase().includes(f.text)) return false;
+        if (f.location && !j.location.toLowerCase().includes(f.location)) return false;
+        if (f.type && !j.type.toLowerCase().includes(f.type)) return false;
+        if (f.company && !j.company.toLowerCase().includes(f.company)) return false;
+        if (f.skills && !f.skills.every((sk) => j.skills.some((js) => js.toLowerCase().includes(sk)))) return false;
+        if (f.text && !(j.title + j.company + j.description).toLowerCase().includes(f.text)) return false;
+        if (locationFilter && !j.location.toLowerCase().includes(locationFilter.toLowerCase())) return false;
+        if (companyFilter && !j.company.toLowerCase().includes(companyFilter.toLowerCase())) return false;
+        if (remoteOnly && !j.location.toLowerCase().includes("remote")) return false;
+        if (recentDays > 0 && j.postedDays > recentDays) return false;
+        if (sourceFilters.length && !(j.source ? sourceFilters.includes(j.source) : false)) return false;
       return true;
     });
 
@@ -186,7 +262,7 @@ useEffect(() => {
     else jobs.sort((a, b) => relevanceScore(b) - relevanceScore(a) || a.postedDays - b.postedDays);
 
     return jobs;
-  }, [query, sort, userSkills, apiJobs]);
+  }, [query, sort, userSkills, apiJobs, locationFilter, companyFilter, remoteOnly, recentDays, sourceFilters]);
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">
@@ -207,7 +283,7 @@ useEffect(() => {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input
             className="glass-input !pl-9 !py-2.5 !text-xs"
-            placeholder='Job title,keywords, or company'
+            placeholder='Job title, keywords, or company'
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
@@ -216,6 +292,65 @@ useEffect(() => {
             }
           }}
           />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+          <input
+            className="glass-input !py-2 !text-xs"
+            placeholder="Location filter"
+            value={locationFilter}
+            onChange={(e) => setLocationFilter(e.target.value)}
+          />
+          <input
+            className="glass-input !py-2 !text-xs"
+            placeholder="Company filter"
+            value={companyFilter}
+            onChange={(e) => setCompanyFilter(e.target.value)}
+          />
+          <select
+            className="glass-input !py-2 !text-xs"
+            value={recentDays}
+            onChange={(e) => setRecentDays(Number(e.target.value))}
+          >
+            <option value={0}>Any age</option>
+            <option value={3}>Posted within 3 days</option>
+            <option value={7}>Posted within 7 days</option>
+            <option value={14}>Posted within 14 days</option>
+          </select>
+          <button
+            onClick={() => setRemoteOnly((current) => !current)}
+            className={`text-[10px] px-3 py-2 rounded-lg font-body transition-all border ${
+              remoteOnly
+                ? "bg-neon/20 text-neon border-neon/40"
+                : "bg-muted/50 text-muted-foreground border-transparent hover:border-neon/20"
+            }`}
+          >
+            Remote only: {remoteOnly ? "On" : "Off"}
+          </button>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[10px] text-muted-foreground font-body inline-flex items-center gap-1">
+            <Filter className="w-3 h-3" /> Sources:
+          </span>
+          {["usajobs", "adzuna"].map((source) => (
+            <button
+              key={source}
+              onClick={() => toggleSource(source)}
+              className={`text-[10px] px-2.5 py-1 rounded-full font-body transition-all border ${
+                sourceFilters.includes(source)
+                  ? "bg-neon/20 text-neon border-neon/40"
+                  : "bg-muted/50 text-muted-foreground border-transparent hover:border-neon/20"
+              }`}
+            >
+              {source}
+            </button>
+          ))}
+          <button
+            onClick={fetchLiveJobs}
+            disabled={loading}
+            className="ml-auto glow-button !text-xs !px-3 !py-1.5"
+          >
+            {loading ? "Searching..." : "Refresh jobs"}
+          </button>
         </div>
         <div className="flex gap-2 items-center">
           <span className="text-[10px] text-muted-foreground font-body">Sort:</span>
@@ -343,32 +478,43 @@ useEffect(() => {
 
               {/* Detail body */}
               <div className="flex-1 overflow-y-auto p-5 space-y-5">
-                <div className="flex flex-wrap gap-4 text-xs text-muted-foreground font-body">
-                  <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{selectedJob.location}</span>
-                  <span className="flex items-center gap-1"><DollarSign className="w-3.5 h-3.5" />{selectedJob.salary}</span>
-                  <span className="flex items-center gap-1"><Briefcase className="w-3.5 h-3.5" />{selectedJob.type}</span>
-                  <span className="text-muted-foreground/60">{selectedJob.postedDays}d ago</span>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs font-body">
+                  <div className="rounded-xl border border-border/10 bg-secondary/20 p-3">
+                    <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground mb-1">Location</p>
+                    <p className="text-foreground flex items-center gap-2"><MapPin className="w-3.5 h-3.5 text-neon" />{selectedJob.location}</p>
+                  </div>
+                  <div className="rounded-xl border border-border/10 bg-secondary/20 p-3">
+                    <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground mb-1">Salary</p>
+                    <p className="text-foreground flex items-center gap-2"><DollarSign className="w-3.5 h-3.5 text-neon" />{selectedJob.salary}</p>
+                  </div>
+                  <div className="rounded-xl border border-border/10 bg-secondary/20 p-3">
+                    <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground mb-1">Source</p>
+                    <p className="text-foreground flex items-center gap-2"><Briefcase className="w-3.5 h-3.5 text-neon" />{selectedJob.source || "live source"}</p>
+                  </div>
                 </div>
 
-                <div>
-                  <h3 className="font-display font-semibold text-foreground text-sm mb-2">Required Skills</h3>
+                <div className="rounded-xl border border-border/10 bg-secondary/20 p-4 space-y-2">
+                  <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground font-body">
+                    <span className="uppercase tracking-[0.18em]">What they're looking for</span>
+                    <span>{selectedJob.postedDays}d ago</span>
+                  </div>
                   <div className="flex flex-wrap gap-1.5">
-                    {selectedJob.skills.map((skill) => {
+                    {selectedJob.skills.slice(0, 8).map((skill) => {
                       const matched = selectedJob.matched_skills?.some((ms) => {
-                      const a = ms.toLowerCase().trim();
-                      const b = skill.toLowerCase().trim();
-                      return a === b || b.includes(a) || a.includes(b);
-                    });
+                        const a = ms.toLowerCase().trim();
+                        const b = skill.toLowerCase().trim();
+                        return a === b || b.includes(a) || a.includes(b);
+                      });
                       return (
                         <span
                           key={skill}
-                          className={`text-xs px-2.5 py-1 rounded-full ${
+                          className={`text-[10px] px-2 py-1 rounded-full border ${
                             matched
-                              ? "bg-match-green/20 text-match-green border border-match-green/30"
-                              : "bg-match-red/20 text-match-red border border-match-red/30"
+                              ? "bg-match-green/20 text-match-green border-match-green/30"
+                              : "bg-muted/50 text-muted-foreground border-border/10"
                           }`}
                         >
-                          {skill} {matched ? "✓" : "✗"}
+                          {skill}
                         </span>
                       );
                     })}
@@ -377,14 +523,32 @@ useEffect(() => {
 
                 <div>
                   <h3 className="font-display font-semibold text-foreground text-sm mb-2">Job Description</h3>
-                  <p className="text-sm text-muted-foreground font-body leading-relaxed"> 
-                      {descExpanded
-                        ? selectedJob.description
-                      : `${selectedJob.description?.slice(0, 350) ?? ""}${
-                        (selectedJob.description?.length ?? 0) > 350 ? "..." : ""
-                     }`}
-                   </p>
-                   {(selectedJob.description?.length ?? 0) > 350 && (
+                  <div className="rounded-xl border border-border/10 bg-card/80 p-4 space-y-3">
+                    {splitDescription(selectedJob.description).map((sentence, index) => (
+                      <p key={index} className="text-sm text-muted-foreground font-body leading-relaxed">
+                        {sentence}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="font-display font-semibold text-foreground text-sm mb-2">More Details</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="rounded-xl border border-border/10 bg-secondary/20 p-3">
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground mb-2">Matched skills</p>
+                      <p className="text-sm text-foreground">
+                        {selectedJob.matched_skills?.length ? selectedJob.matched_skills.join(", ") : "No strong match signals found yet."}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-border/10 bg-secondary/20 p-3">
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground mb-2">Apply link</p>
+                      <p className="text-sm text-foreground break-words">
+                        {selectedJob.url || "No apply link available."}
+                      </p>
+                    </div>
+                  </div>
+                  {(selectedJob.description?.length ?? 0) > 350 && (
                     <button
                       onClick={() => setDescExpanded((prev) => !prev)}
                       className="mt-2 text-xs text-neon hover:underline font-body"

@@ -12,7 +12,7 @@ from rag.retriever import retrieve_for_interview_cached
 load_dotenv()
 
 router = APIRouter(prefix="/interview", tags=["interview"])
-client = OpenAI(api_key=os.getenv("API_KEY"))
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY") or os.getenv("API_KEY"))
 
 class AnswerRequest(BaseModel):
     question: str

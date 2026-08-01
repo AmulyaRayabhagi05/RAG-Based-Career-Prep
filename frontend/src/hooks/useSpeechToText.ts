@@ -6,7 +6,6 @@ export function useSpeechToText(
     onPartialResult?: (text: string) => void
 ) {
     const recognizerRef = useRef<SpeechSDK.SpeechRecognizer | null>(null);
-    const streamRef = useRef<MediaStream | null>(null);
 
     const startListening = async () => {
         try {
@@ -15,16 +14,9 @@ export function useSpeechToText(
             const subscriptionKey = data.token;
             const region = data.region;
 
-            
-            const stream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    sampleRate: 16000,
-                    channelCount: 1
-                }
-            });
-            streamRef.current = stream;
+            if (!subscriptionKey || !region) {
+                throw new Error("Speech token or region is missing from the backend response.");
+            }
 
             
             const speechConfig = SpeechSDK.SpeechConfig.fromSubscription(subscriptionKey, region);
@@ -40,7 +32,7 @@ export function useSpeechToText(
             );
 
             
-            const audioConfig = SpeechSDK.AudioConfig.fromStreamInput(stream);
+            const audioConfig = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
 
             
             const recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
@@ -87,11 +79,6 @@ export function useSpeechToText(
                 recognizerRef.current?.close();
                 recognizerRef.current = null;
             });
-        }
-
-        if (streamRef.current) {
-            streamRef.current.getTracks().forEach(track => track.stop());
-            streamRef.current = null;
         }
     };
 

@@ -53,7 +53,11 @@ def query_jobs(query: str, n_results: int = 10, title_filter=None) -> list[dict]
 def retrieve_for_resume(student_profile: dict, target_title=None) -> dict:
     skills_str = ", ".join(student_profile.get("skills", []))
     coursework_str = ", ".join(student_profile.get("coursework", []))
-    query = f"{skills_str} {coursework_str}".strip()
+    projects_str = ", ".join(student_profile.get("projects", []))
+    major_str = str(student_profile.get("major", "")).strip()
+    target_role_str = str(student_profile.get("target_role", "")).strip()
+    target_title_str = ", ".join(target_title) if isinstance(target_title, list) else (target_title or "")
+    query = " ".join(part for part in [skills_str, coursework_str, projects_str, major_str, target_role_str, target_title_str] if part).strip()
 
     job_chunks = query_jobs(query, n_results=10, title_filter=target_title)
 

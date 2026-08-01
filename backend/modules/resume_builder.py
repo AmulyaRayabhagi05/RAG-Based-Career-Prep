@@ -78,7 +78,9 @@ def extract_requirements(job_chunks):
 def map_student_to_jobs(student, job_data):
     keywords = set(
         [normalize_skill(s) for s in student.get("skills", [])] +
-        [normalize_skill(c) for c in student.get("coursework", [])]
+        [normalize_skill(c) for c in student.get("coursework", [])] +
+        [normalize_skill(p) for p in student.get("projects", [])] +
+        [normalize_skill(student.get("major", ""))]
     )
 
     matched = []
@@ -95,7 +97,8 @@ def map_student_to_jobs(student, job_data):
 def generate_bullets(student, matched_jobs):
     bullets = []
     seen = set()
-    skills = student.get("skills", []) or ["software development"]
+    skills = student.get("skills", []) or student.get("coursework", []) or student.get("projects", []) or ["software development"]
+    target_focus = student.get("target_role") or student.get("major") or "target role"
 
     for job in matched_jobs[:5]:
         title = job["title"]
@@ -113,6 +116,19 @@ def generate_bullets(student, matched_jobs):
                 task=task
             )
 
+            if bullet not in seen:
+                seen.add(bullet)
+                bullets.append(bullet)
+
+    if not bullets:
+        fallback_terms = [normalize_skill(s) for s in skills[:4] if normalize_skill(s)]
+        if not fallback_terms:
+            fallback_terms = ["software development"]
+
+        for term in fallback_terms:
+            verb = get_verb(term)
+            task = random.choice(TASK_PHRASES)
+            bullet = f"{verb} {term.title()} initiatives to {task}, aligning with {target_focus} goals."
             if bullet not in seen:
                 seen.add(bullet)
                 bullets.append(bullet)

@@ -137,38 +137,57 @@ def cosine_similarity(tokens1: List[str], tokens2: List[str]) -> float:
     return dot / (mag1 * mag2)
 
 
-def derive_keywords(profile: Dict[str, Any]) -> str:
-    target_role = str(profile.get("target_role", "")).strip()
-    major = str(profile.get("major", "")).strip()
+ROLE_FOCUS_PATTERNS = [
+    ("software engineer", [
+        r"software engineer", r"software development", r"backend", r"frontend", r"full[- ]stack",
+        r"web developer", r"application developer", r"system design", r"distributed systems",
+        r"react", r"typescript", r"javascript", r"node\.js", r"api", r"engineering"
+    ]),
+    ("data scientist", [r"data scientist", r"data analysis", r"statistics", r"machine learning", r"ml", r"pandas", r"tableau", r"power bi"]),
+    ("machine learning engineer", [r"machine learning engineer", r"ml engineer", r"machine learning", r"deep learning", r"pytorch", r"tensorflow", r"nlp"]),
+    ("devops engineer", [r"devops", r"site reliability", r"sre", r"kubernetes", r"docker", r"terraform", r"aws", r"azure", r"cloud"]),
+    ("product manager", [r"product manager", r"product management", r"roadmap", r"stakeholder", r"product strategy"]),
+]
 
-    if target_role and target_role.lower() != "entry":
-        return target_role
 
-    if major:
-        return major
+def infer_role_focus(profile: Dict[str, Any]) -> str:
+    parts = [
+        str(profile.get("query", "")),
+        str(profile.get("target_role", "")),
+        str(profile.get("resumeText", "")),
+        str(profile.get("current_role", "")),
+        str(profile.get("current_org", "")),
+        str(profile.get("major", "")),
+        " ".join(profile.get("skills", []) or []),
+        " ".join(profile.get("coursework", []) or []),
+    ]
+    text = " ".join(parts).lower()
+
+    for role, patterns in ROLE_FOCUS_PATTERNS:
+        if any(re.search(pattern, text) for pattern in patterns):
+            return role
+
+    if str(profile.get("target_role", "")).strip():
+        return str(profile.get("target_role", "")).strip()
+
+    if str(profile.get("major", "")).strip():
+        return str(profile.get("major", "")).strip()
 
     return "software engineer"
 
 
-def fetch_kaggle_jobs(profile: Dict[str, Any]):
-    jobs = []
-    # Pulling all 1167 rows from your dataset
-    docs = list(db["all_job_kaggle"].find())
+def derive_keywords(profile: Dict[str, Any]) -> str:
+    query = str(profile.get("query", "")).strip()
+    inferred_role = infer_role_focus(profile)
 
-    for doc in docs:
-        # Standardizing keys to match your MongoDB row
-        jobs.append({
-            "job_id": doc.get("job_id"),
-            "title": doc.get("job_title", "Unknown"),
-            "company": doc.get("category", "Industry Professional"), 
-            "location": "Dallas, TX",
-            "description": doc.get("job_description", ""),
-            "skills": doc.get("job_skill_set", []),
-            "url": f"https://jobs.example.com/{doc.get('job_id')}",
-            "salary": None,
-            "source": "all_job_kaggle"
-        })
-    return jobs
+    def looks_like_role(text: str) -> bool:
+        return any(re.search(pattern, text.lower()) for _, patterns in ROLE_FOCUS_PATTERNS for pattern in patterns)
+
+    if query and looks_like_role(query):
+        return query
+
+    return inferred_role
+
 
 def format_salary(min_salary=None, max_salary=None):
     try:
@@ -191,12 +210,17 @@ def fetch_adzuna_jobs(profile: Dict[str, Any]) -> List[Dict[str, Any]]:
         return []
 
     keyword = derive_keywords(profile) #or "software engineer"
+    location = str(profile.get("location", "")).strip()
+    if not location:
+        preferred_locations = profile.get("location_preference", []) or []
+        location = preferred_locations[0] if preferred_locations else ""
 
     params = {
         "app_id": aid,
         "app_key": akey,
         "what": keyword,
-        "results_per_page": 50
+        "results_per_page": 50,
+        "where": location or None,
     }
 
     try:
@@ -285,6 +309,10 @@ def fetch_usajobs_jobs(profile: Dict[str, Any]) -> List[Dict[str, Any]]:
         return []
 
     keyword = derive_keywords(profile)
+    location = str(profile.get("location", "")).strip()
+    if not location:
+        preferred_locations = profile.get("location_preference", []) or []
+        location = preferred_locations[0] if preferred_locations else ""
 
     headers = {
         "Host": "data.usajobs.gov",
@@ -294,7 +322,8 @@ def fetch_usajobs_jobs(profile: Dict[str, Any]) -> List[Dict[str, Any]]:
 
     params = {
         "Keyword": keyword,
-        "ResultsPerPage": 50
+        "ResultsPerPage": 50,
+        "LocationName": location or None
     }
 
     try:
@@ -400,7 +429,7 @@ def fetch_all_jobs(profile: Dict[str, Any]) -> List[Dict[str, Any]]:
 
     # Cache miss: fetch from sources in parallel
     jobs = []
-    sources = [fetch_usajobs_jobs, fetch_adzuna_jobs, fetch_kaggle_jobs]
+    sources = [fetch_usajobs_jobs, fetch_adzuna_jobs]
     try:
         t0 = time.time()
         with ThreadPoolExecutor(max_workers=len(sources)) as ex:
@@ -425,17 +454,45 @@ def fetch_all_jobs(profile: Dict[str, Any]) -> List[Dict[str, Any]]:
 
     return jobs
 
-    return jobs
+
+def is_workable_url(url: str, source: str = "") -> bool:
+    if not url or not isinstance(url, str):
+        return False
+
+    url = url.strip()
+    if not url.startswith(("http://", "https://")):
+        return False
+
+    if source.lower() == "adzuna":
+        try:
+            response = requests.get(
+                url,
+                timeout=8,
+                allow_redirects=True,
+                headers={"User-Agent": "Mozilla/5.0"},
+            )
+            return 200 <= response.status_code < 400
+        except Exception:
+            return False
+
+    return True
 
 def score_job(job, profile):
     p_skills = [s.lower().strip() for s in profile.get("skills", [])]
     preferred_locations = [loc.lower().strip() for loc in profile.get("location_preference", [])]
     target_role = str(profile.get("target_role", "")).lower().strip()
     major = str(profile.get("major", "")).lower().strip()
+    query = str(profile.get("query", "")).lower().strip()
+    source_filters = {str(s).lower().strip() for s in profile.get("sources", []) if str(s).strip()}
+    company_filter = str(profile.get("company", "")).lower().strip()
+    location_filter = str(profile.get("location", "")).lower().strip()
+    remote_only = bool(profile.get("remote_only", False))
+    posted_within_days = int(profile.get("posted_within_days", 0) or 0)
 
     title = str(job.get("title", "")).lower()
     description = str(job.get("description", "")).lower()
     location = str(job.get("location", "")).lower()
+    source = str(job.get("source", "")).lower().strip()
     job_text = f"{title} {description}"
     required_skills = extract_job_skills(title, description)
     job_skill_list = [str(s).lower().strip() for s in job.get("skills", [])]
@@ -446,7 +503,9 @@ def score_job(job, profile):
     sim = cosine_similarity(tokenize(" ".join(p_skills + [major])), tokenize(job_text))
 
     title_score = 0.0
-    if target_role and target_role in title:
+    if query and query in job_text:
+        title_score = 1.0
+    elif target_role and target_role in title:
         title_score = 1.0
     elif major and major in title:
         title_score = 0.7
@@ -458,12 +517,40 @@ def score_job(job, profile):
         location_score = 1.0
     elif "remote" in preferred_locations and "remote" in location:
         location_score = 1.0
+    elif location_filter and location_filter in location:
+        location_score = 1.0
+
+    source_score = 0.0
+    if source_filters:
+        source_score = 1.0 if source in source_filters else -0.5
+
+    company_score = 0.0
+    if company_filter:
+        company_score = 1.0 if company_filter in str(job.get("company", "")).lower() else -0.25
+
+    recency_score = 0.0
+    date_posted = job.get("date_posted")
+    if posted_within_days and date_posted:
+        try:
+            days_old = (datetime.now(timezone.utc) - datetime.fromisoformat(str(date_posted).replace("Z", "+00:00"))).days
+            recency_score = 1.0 if days_old <= posted_within_days else -0.5
+        except Exception:
+            recency_score = 0.0
+
+    if remote_only and "remote" not in location:
+        job["match_score"] = 0.0
+        job["matched_skills"] = matched
+        job["skills"] = required_skills
+        return 0.0
 
     final_score = (
         0.45 * overlap +
         0.25 * sim +
         0.20 * title_score +
-        0.10 * location_score
+        0.08 * location_score +
+        0.04 * source_score +
+        0.02 * company_score +
+        0.01 * recency_score
     )
 
     job["match_score"] = round(final_score, 4)
@@ -567,20 +654,61 @@ def run_job_search(profile: Dict[str, Any]) -> Dict[str, Any]:
     # Fetch and score
     all_jobs = fetch_all_jobs(profile)
 
+    if profile.get("sources"):
+        allowed_sources = {str(s).lower().strip() for s in profile.get("sources", []) if str(s).strip()}
+        all_jobs = [job for job in all_jobs if str(job.get("source", "")).lower().strip() in allowed_sources]
+
     for job in all_jobs:
         score_job(job, profile)
 
     sorted_jobs = sorted(all_jobs, key=lambda x: x.get("match_score", 0), reverse=True)
 
-    best_usajobs = next((job for job in sorted_jobs if job.get("source") == "usajobs"), None)
-    ranked = [job for job in sorted_jobs if job.get("source") == "usajobs"][:5]
+    ranked = []
+    seen_ids = set()
+    allowed_sources = [str(s).lower().strip() for s in profile.get("sources", []) if str(s).strip()]
+    source_priority = ["usajobs", "adzuna"]
+    if allowed_sources:
+        source_priority = [s for s in source_priority if s in allowed_sources] or allowed_sources
 
-    if len(ranked) < 5:
-        used_ids = {job.get("job_id") for job in ranked}
-        fillers = [job for job in sorted_jobs if job.get("job_id") not in used_ids]
-        ranked.extend(fillers[:5 - len(ranked)])
+    quotas = {"usajobs": 5, "adzuna": 1}
 
-    ranked = ranked[:5]
+    for source_name in source_priority:
+        quota = quotas.get(source_name, 1)
+        picked_for_source = 0
+        for job in sorted_jobs:
+            if str(job.get("source", "")).lower() != source_name:
+                continue
+            if picked_for_source >= quota:
+                break
+            job_id = job.get("job_id")
+            if job_id in seen_ids:
+                continue
+            if not is_workable_url(job.get("url", ""), source_name):
+                continue
+            ranked.append(job)
+            seen_ids.add(job_id)
+            picked_for_source += 1
+            if len(ranked) >= 6:
+                break
+        if len(ranked) >= 6:
+            break
+
+    if len(ranked) < 6:
+        for job in sorted_jobs:
+            job_id = job.get("job_id")
+            if job_id in seen_ids:
+                continue
+            source_name = str(job.get("source", "")).lower()
+            if allowed_sources and source_name not in allowed_sources:
+                continue
+            if not is_workable_url(job.get("url", ""), source_name):
+                continue
+            ranked.append(job)
+            seen_ids.add(job_id)
+            if len(ranked) >= 6:
+                break
+
+    ranked = ranked[:6]
 
     # Avoid expensive OpenAI calls by default. Enable with JOB_USE_OPENAI_SKILLS=1.
     use_openai = os.getenv("JOB_USE_OPENAI_SKILLS", "0") == "1" and os.getenv("OPENAI_API_KEY")

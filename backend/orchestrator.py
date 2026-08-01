@@ -168,6 +168,10 @@ async def call_module(module_name: str, input_data: Any):
             "coursework": getattr(input_data, "coursework", []) or [],
             "projects": getattr(input_data, "projects", []) or [],
             "major": getattr(input_data, "major", "") or "",
+            "target_role": getattr(input_data, "target_role", "") or "",
+            "resumeText": getattr(input_data, "resumeText", "") or "",
+            "current_role": getattr(input_data, "current_role", "") or "",
+            "current_org": getattr(input_data, "current_org", "") or "",
         }
         loop = asyncio.get_running_loop()
         target_role = getattr(input_data, "target_role", "") or ""

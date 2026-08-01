@@ -11,113 +11,88 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _openai_client() -> OpenAI:
+    return OpenAI(api_key=os.getenv("OPENAI_API_KEY") or os.getenv("API_KEY"))
+
+
+def _google_nlp_key() -> str | None:
+    return os.getenv("GOOGLE_API_KEY") or os.getenv("NLP_KEY")
+
+
 
 
 def setUp():
-  selection = input("Do you want HR or Technical questions(Type HR or Technical): ")
+        selection = input("Do you want HR or Technical questions(Type HR or Technical): ")
 
+        if selection == "HR":
+                title = "Geothermal Production Managers"
 
-  if selection == "HR":
-      title = "Geothermal Production Managers"
+                data = pd.read_csv("backend/modules/new_behavioral_interview_questions_dataset.csv")
 
+                start_question = "Tell me about yourself"
+                start_question_response = input(start_question + ": ")
 
-      data = pd.read_csv("backend/modules/new_behavioral_interview_questions_dataset.csv")
-   
-      start_question = "Tell me about yourself"
-   
-      start_question_response = input(start_question + ": ")
-   
-      client = OpenAI(api_key= os.getenv("API_KEY"))
+                client = _openai_client()
 
+                print(generate_feedback(start_question, start_question_response, client))
 
-      print(generate_feedback(start_question, start_question_response, client))
+                next = input("Do you want another question? (Type yes or no): ")
 
+                if next == "yes":
+                        next_boolean = True
 
-      next = input("Do you want another question? (Type yes or no): ")
+                        while next_boolean:
+                                print("\n")
 
+                                question = generate_questions(selection, data, title, client)
 
-      if next == "yes":
-            next_boolean = True
+                                question_response = input(question + ": ")
 
+                                print("\n")
 
-            while next_boolean:
-               
-               print("\n")
+                                print(generate_feedback(question, question_response, client))
 
+                                print("\n")
 
-               question = generate_questions(selection, data, title, client)
+                                next = input("Do you want another question? (Type yes or no): ")
 
+                                if next == "no" or next != "yes":
+                                        next_boolean = False
 
-               question_response = input(question + ": ")
+        if selection == "Technical":
+                data = pd.read_csv("backend/modules/Task Statements.csv")
 
+                title = "Geothermal Production Managers"
 
-               print("\n")
+                start_question = "Tell me about yourself"
+                start_question_response = input(start_question + ": ")
 
+                client = _openai_client()
 
-               print(generate_feedback(question, question_response, client))
+                print(generate_feedback(start_question, start_question_response, client))
 
+                next = input("Do you want another question? (Type yes or no): ")
 
-               print("\n")
+                if next == "yes":
+                        next_boolean = True
 
+                        while next_boolean:
+                                print("\n")
 
-               next = input("Do you want another question? (Type yes or no): ")
+                                question = generate_questions(selection, data, title, client)
 
+                                question_response = input(question + ": ")
 
-               if next == "no" or next != "yes":
-                 next_boolean = False
+                                print("\n")
 
+                                print(generate_feedback(question, question_response, client))
 
-  if selection == "Technical":
-    data = pd.read_csv("backend/modules/Task Statements.csv")
+                                print("\n")
 
+                                next = input("Do you want another question? (Type yes or no): ")
 
-    title = "Geothermal Production Managers"
-
-
-    start_question = "Tell me about yourself"
-
-
-    start_question_response = input(start_question + ": ")
-
-
-    client = OpenAI(api_key= os.getenv("API_KEY"))
-
-
-    print(generate_feedback(start_question, start_question_response, client))
-
-
-    next = input("Do you want another question? (Type yes or no): ")
-
-
-    if next == "yes":
-       next_boolean = True
-
-
-       while next_boolean:
-         
-          print("\n")
-
-
-          question = generate_questions(selection, data, title, client)
-
-
-          question_response = input(question + ": ")
-
-
-          print("\n")
-
-
-          print(generate_feedback(question, question_response, client))
-
-
-          print("\n")
-
-
-          next = input("Do you want another question? (Type yes or no): ")
-
-
-          if next == "no" or next != "yes":
-            next_boolean = False
+                                if next == "no" or next != "yes":
+                                        next_boolean = False
    
 
 
@@ -179,23 +154,26 @@ def generate_feedback(question, answer, client):
     feedback_response = response.choices[0].message.content.strip()
 
 
-    url = f"https://language.googleapis.com/v1/documents:analyzeSentiment?key={os.getenv('NLP_KEY')}"
+    score = 0.0
+    google_key = _google_nlp_key()
+    if google_key:
+        url = f"https://language.googleapis.com/v1/documents:analyzeSentiment?key={google_key}"
 
+        payload = {
+            "document": {
+                "type": "PLAIN_TEXT",
+                "content": answer
+            },
+            "encodingType": "UTF8"
+        }
 
-    payload = {
-        "document": {
-            "type": "PLAIN_TEXT",
-            "content": answer
-        },
-        "encodingType": "UTF8"
-    }
-
-
-
-    response = requests.post(url, json=payload)
-    response.raise_for_status()
-    sentiment_data = response.json()
-    score = sentiment_data['documentSentiment']['score']
+        try:
+            response = requests.post(url, json=payload, timeout=15)
+            response.raise_for_status()
+            sentiment_data = response.json()
+            score = sentiment_data.get("documentSentiment", {}).get("score", 0.0)
+        except (requests.RequestException, ValueError):
+            score = 0.0
 
 
     quality_prompt = f"""Rate this interview answer quality from 0 to 1 where:

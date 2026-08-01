@@ -7,7 +7,6 @@ import chromadb
 from sentence_transformers import SentenceTransformer
 
 # --- Setup Environment Variables ---
-# This looks for the .env file in the root directory (3 levels up)
 load_dotenv()
 
 mongo_url = os.getenv("MONGO_URI")
