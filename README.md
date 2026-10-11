@@ -12,8 +12,6 @@
 
 ![Elevatr dashboard](./frontend/src/assets/dashboard.png)
 
-> **Design doc + code tour.** Each section links to the code that implements it. Searchable tags in the source
-> (`[RAG-2 CHUNK]`, `[ORCH-1 PLAN]`, `[LLM-JUDGE]`, …) let you jump straight to a component; see the [Code tour](#10-code-tour-how-to-demo-this-in-10-minutes).
 
 ---
 
