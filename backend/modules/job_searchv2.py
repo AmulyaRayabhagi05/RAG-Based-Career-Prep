@@ -7,7 +7,7 @@ import requests
 import json
 import time
 from datetime import datetime, timezone, timedelta
-from openai import OpenAI
+from llm import get_openai_client, model_name
 from collections import Counter
 from typing import Dict, Any, List
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 from pymongo import MongoClient
 
 load_dotenv()
-openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+openai_client = get_openai_client()
 #Reads Mongo thing.
 MONGODB_URI = os.getenv("MONGO_URI")
 MONGODB_DB = os.getenv("DB_NAME", "elevatr_db")
@@ -623,7 +623,7 @@ def extract_job_skills_openai(title: str, description: str) -> List[str]:
 
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model_name("small"),
             messages=[ {"role": "system", "content": "You extract job skills. Always return valid JSON only."}, 
                        {"role": "user", "content": prompt} ],
             temperature=0, 

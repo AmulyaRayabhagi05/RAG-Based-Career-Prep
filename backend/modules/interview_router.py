@@ -3,7 +3,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 import os
 import pandas as pd
-from openai import OpenAI
+from llm import get_openai_client
 import requests
 import json
 from dotenv import load_dotenv
@@ -12,7 +12,7 @@ from rag.retriever import retrieve_for_interview_cached
 load_dotenv()
 
 router = APIRouter(prefix="/interview", tags=["interview"])
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY") or os.getenv("API_KEY"))
+client = get_openai_client()
 
 class AnswerRequest(BaseModel):
     question: str

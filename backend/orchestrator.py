@@ -2,7 +2,7 @@
 """
 Agentic orchestrator: one natural-language query -> N specialised modules, run in parallel.
 
-    [ORCH-1 PLAN]     gpt-4o + structured output decomposes the query into typed SubTasks
+    [ORCH-1 PLAN]     LLM (llm.py: Ollama or GPT-4o) + structured output decomposes the query into typed SubTasks
     [ORCH-2 EXECUTE]  each SubTask runs concurrently (asyncio.TaskGroup, 120s budget);
                       a failing module is isolated and cannot take the others down
     [ORCH-3 RESPOND]  results are shaped into a deterministic UI payload (cards, order,
@@ -18,10 +18,10 @@ from typing import Any, Dict, List, Optional, Union
 
 from dotenv import load_dotenv
 from jinja2 import Environment, FileSystemLoader
-from langchain.chat_models import init_chat_model
 from langchain.messages import AIMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
+from llm import get_chat_model
 from modules.grad_school import GradSchoolPrep
 from modules.job_search import run_job_search
 from modules.resume_builder import generate_resume
@@ -210,7 +210,9 @@ async def call_module(module_name: str, input_data: Any):
             "location_preference": getattr(input_data, "location_preference", []) or [],
             "target_role": getattr(input_data, "target_role", "") or "",
         }
-        return await run_job_search(student_profile)
+        # run_job_search is synchronous (blocking HTTP calls to Adzuna/USAJOBS), so it
+        # must run in a worker thread; awaiting it directly raised a TypeError.
+        return await asyncio.to_thread(run_job_search, student_profile)
 
     if module_name == "grad_school":
         grad_profile = {
@@ -373,7 +375,7 @@ async def decompose(query: str, student_profile: dict, history: Optional[list] =
     decomp_template = jinja_env.get_template("decomp_prompt.j2")
     decomp_prompt = decomp_template.render()
 
-    model = init_chat_model(model="gpt-4o")
+    model = get_chat_model("large", temperature=0)
     conversation = [SystemMessage(decomp_prompt)]
     conversation.append(SystemMessage(f"Student Profile: {compacted_profile}"))
 

@@ -1,0 +1,275 @@
+{
+  "timestamp": "2026-10-11T17:31:23",
+  "provider": "ollama",
+  "judge_model": "llama3.2:3b",
+  "suites": {
+    "routing": {
+      "summary": {
+        "exact_match_rate": 0.5,
+        "mean_precision": 0.76,
+        "mean_recall": 1.0,
+        "mean_f1": 0.836
+      },
+      "cases": [
+        {
+          "id": "route-resume-only",
+          "expected": [
+            "resume_builder"
+          ],
+          "predicted": [
+            "resume_builder"
+          ],
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "exact_match": true
+        },
+        {
+          "id": "route-skill-gap-only",
+          "expected": [
+            "skill_gap"
+          ],
+          "predicted": [
+            "skill_gap"
+          ],
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "exact_match": true
+        },
+        {
+          "id": "route-multi-intent",
+          "expected": [
+            "skill_gap",
+            "resume_builder"
+          ],
+          "predicted": [
+            "skill_gap",
+            "resume_builder"
+          ],
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "exact_match": true
+        },
+        {
+          "id": "route-interview",
+          "expected": [
+            "interview"
+          ],
+          "predicted": [
+            "interview"
+          ],
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "exact_match": true
+        },
+        {
+          "id": "route-jobs",
+          "expected": [
+            "job_search"
+          ],
+          "predicted": [
+            "job_search",
+            "resume_builder"
+          ],
+          "precision": 0.5,
+          "recall": 1.0,
+          "f1": 0.667,
+          "exact_match": false
+        },
+        {
+          "id": "route-grad",
+          "expected": [
+            "grad_school"
+          ],
+          "predicted": [
+            "grad_school",
+            "skill_gap"
+          ],
+          "precision": 0.5,
+          "recall": 1.0,
+          "f1": 0.667,
+          "exact_match": false
+        },
+        {
+          "id": "route-three-way",
+          "expected": [
+            "skill_gap",
+            "job_search",
+            "interview"
+          ],
+          "predicted": [
+            "skill_gap",
+            "job_search",
+            "resume_builder",
+            "interview"
+          ],
+          "precision": 0.75,
+          "recall": 1.0,
+          "f1": 0.857,
+          "exact_match": false
+        },
+        {
+          "id": "route-indirect-phrasing",
+          "expected": [
+            "resume_builder"
+          ],
+          "predicted": [
+            "skill_gap",
+            "resume_builder",
+            "job_search"
+          ],
+          "precision": 0.333,
+          "recall": 1.0,
+          "f1": 0.5,
+          "exact_match": false
+        }
+      ],
+      "seconds": 185.2
+    },
+    "retrieval": {
+      "summary": {
+        "mean_precision@5": 0.65,
+        "hit_rate@5": 0.75,
+        "MRR": 0.75
+      },
+      "cases": [
+        {
+          "id": "ret-exact-title",
+          "target_role": "Software Developers",
+          "retrieved_titles": [
+            "Software Developers"
+          ],
+          "relevance": [
+            true
+          ],
+          "precision@5": 1.0,
+          "hit@5": true,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "ret-data-science",
+          "target_role": "Data Scientists",
+          "retrieved_titles": [
+            "Data Scientists"
+          ],
+          "relevance": [
+            true
+          ],
+          "precision@5": 1.0,
+          "hit@5": true,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "ret-colloquial-title",
+          "target_role": "SWE",
+          "retrieved_titles": [
+            "Backend Developer",
+            "Backend Developer",
+            "Front-end Developer",
+            "Software Engineer",
+            "Front-end Developer"
+          ],
+          "relevance": [
+            true,
+            true,
+            false,
+            true,
+            false
+          ],
+          "precision@5": 0.6,
+          "hit@5": true,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "ret-non-tech",
+          "target_role": "Registered Nurses",
+          "retrieved_titles": [
+            "Health Informatics Specialists",
+            "Clinical Data Managers",
+            "AI Specialist",
+            "AI Specialist",
+            "Biostatisticians"
+          ],
+          "relevance": [
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "precision@5": 0.0,
+          "hit@5": false,
+          "reciprocal_rank": 0.0
+        }
+      ],
+      "seconds": 171.8
+    },
+    "resume": {
+      "summary": {
+        "mean_score": 3.5,
+        "mean_groundedness": 3,
+        "mean_role_relevance": 4,
+        "mean_ats_quality": 3.5
+      },
+      "cases": [
+        {
+          "id": "resume-cs",
+          "bullets": [
+            "Designed scalable system using Computer Science to support Analyze user needs and software requirements to determine feasibility of design  in a Software Developers context.",
+            "Processed scalable system using Databases to support Analyze user needs and software requirements to determine feasibility of design  in a Software Developers context."
+          ],
+          "scores": {
+            "groundedness": 2,
+            "role_relevance": 3,
+            "ats_quality": 4
+          },
+          "mean": 3.0,
+          "judge_summary": "The system scores 2/5 for groundedness due to invented phrases. It scores 3/5 for role_relevance as it targets the correct field but lacks specificity. It scores 4/5 for ats_quality due to strong action verbs and specific tasks, though vague outcomes."
+        },
+        {
+          "id": "resume-data",
+          "bullets": [
+            "Implemented scalable system using Machine Learning to support Analyze, manipulate, or process large sets of data using statistical software. A in a Data Scientists context."
+          ],
+          "scores": {
+            "groundedness": 4,
+            "role_relevance": 5,
+            "ats_quality": 3
+          },
+          "mean": 4.0,
+          "judge_summary": "Score breakdown: groundedness (4), role_relevance (5), ats_quality (3)"
+        }
+      ],
+      "seconds": 77.2
+    },
+    "interview": {
+      "summary": {
+        "ranking_accuracy": 0.0,
+        "mean_feedback_quality": 3.335
+      },
+      "cases": [
+        {
+          "id": "iv-tell-me",
+          "strong_score": 0.0,
+          "weak_score": 0.0,
+          "ranks_correctly": false,
+          "judge_strong": {
+            "accuracy": 2,
+            "actionability": 4,
+            "specificity": 5
+          },
+          "judge_weak": {
+            "accuracy": 2,
+            "actionability": 3,
+            "specificity": 4
+          },
+          "judge_mean": 3.335
+        }
+      ],
+      "seconds": 245.9
+    }
+  }
+}

@@ -3,7 +3,7 @@
 
     python -m evals.run_evals                      # all suites   (run from backend/)
     python -m evals.run_evals --suite routing      # one suite
-    python -m evals.run_evals --suite retrieval --limit 2 --judge-model gpt-4o-mini
+    python -m evals.run_evals --suite retrieval --limit 2 --judge-model gemma4:e4b
 
 Suites
     routing    Does the orchestrator pick the right modules?   deterministic: P / R / F1 / exact match
@@ -12,7 +12,8 @@ Suites
     interview  Does the feedback scorer rank answers correctly? deterministic ordering check + LLM judge rubric
 
 Every run writes a JSON report to evals/results/ so runs can be diffed over time.
-Requires OPENAI_API_KEY; retrieval/resume also require an ingested Chroma index.
+Uses the provider in llm.py (LLM_PROVIDER=ollama by default; openai needs OPENAI_API_KEY).
+Retrieval/resume also require an ingested Chroma index.
 """
 
 import argparse
@@ -32,6 +33,7 @@ if BACKEND_DIR not in sys.path:
 
 load_dotenv(find_dotenv())
 
+from llm import LLM_PROVIDER, model_name
 from evals.judge import INTERVIEW_FEEDBACK_RUBRIC, RESUME_BULLET_RUBRIC, LLMJudge
 from evals.metrics import hit_at_k, precision_at_k, reciprocal_rank, safe_mean, set_precision_recall_f1
 
@@ -192,8 +194,9 @@ SUITES: Dict[str, Callable[[List[dict], LLMJudge], dict]] = {
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run Elevatr offline evals")
     parser.add_argument("--suite", choices=[*SUITES, "all"], default="all")
-    parser.add_argument("--judge-model", default="gpt-4o",
-                        help="Model used as the judge (use a different family than the generator if you can)")
+    parser.add_argument("--judge-model", default=None,
+                        help="Judge model override (default: the provider's large tier). "
+                             "Prefer a different model family than the generator.")
     parser.add_argument("--limit", type=int, default=None, help="Max cases per suite (cheap smoke runs)")
     args = parser.parse_args()
 
@@ -202,7 +205,8 @@ def main() -> None:
     selected = list(SUITES) if args.suite == "all" else [args.suite]
 
     report: Dict[str, Any] = {"timestamp": datetime.now().isoformat(timespec="seconds"),
-                              "judge_model": args.judge_model, "suites": {}}
+                              "provider": LLM_PROVIDER,
+                              "judge_model": args.judge_model or model_name("large"), "suites": {}}
     for name in selected:
         cases = golden.get(name, [])[: args.limit]
         print(f"\n▶ {name} ({len(cases)} cases)")

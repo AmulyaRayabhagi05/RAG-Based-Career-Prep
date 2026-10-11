@@ -29,6 +29,7 @@ from modules.grad_router import router as grad_router
 
 # Resume tailoring imports
 from openai import AsyncOpenAI
+from llm import get_async_openai_client, model_name
 from jinja2 import Environment, FileSystemLoader
 from xhtml2pdf import pisa
 
@@ -419,7 +420,7 @@ def _categorise_skills(skills: list[str]) -> dict[str, list[str]]:
 async def _call_openai_async(client: AsyncOpenAI, prompt: str, system: str = _BULLET_SYSTEM) -> str | None:
     try:
         resp = await client.chat.completions.create(
-            model="gpt-4o",
+            model=model_name("large"),
             max_tokens=300,
             temperature=0.2,
             messages=[
@@ -544,7 +545,7 @@ async def tailor_resume(
     job_company: str     = job.get("company", "")
 
     # ── 3. AI rewrite ─────────────────────────────────────────────────────────
-    openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    openai_client = get_async_openai_client()
 
     keywords = await _extract_keywords(openai_client, job_description)
 

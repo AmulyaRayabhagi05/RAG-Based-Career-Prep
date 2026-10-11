@@ -17,7 +17,7 @@ import os
 import re
 import sys
 
-from openai import OpenAI
+from llm import get_openai_client, model_name
 from jinja2 import Environment, FileSystemLoader
 from xhtml2pdf import pisa
 from dotenv import load_dotenv
@@ -25,7 +25,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ── OpenAI client ──────────────────────────────────────────────────────────────
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+client = get_openai_client()
 
 BULLET_SYSTEM_PROMPT = """You are a professional resume writer. Your job is to improve resume bullets
 using the WHO Method while staying 100% truthful to what the candidate actually did.
@@ -55,7 +55,7 @@ def call_openai(prompt: str, system: str = BULLET_SYSTEM_PROMPT) -> str | None:
     """Call GPT-4o and return the stripped text response."""
     try:
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model=model_name("large"),
             max_tokens=300,
             temperature=0.2,
             messages=[

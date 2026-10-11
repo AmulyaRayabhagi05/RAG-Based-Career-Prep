@@ -18,3 +18,4 @@ pytesseract
 pillow
 pdf2image
 xhtml2pdf
+langchain-ollama

@@ -6,7 +6,7 @@
 
 **An agentic RAG career copilot: one question in, the right specialist tools out.**
 
-`FastAPI` · `LangChain + GPT-4o (structured output)` · `ChromaDB` · `Sentence-Transformers` · `MongoDB Atlas` · `React 18 + TypeScript`
+`FastAPI` · `LangChain + Ollama / GPT-4o (structured output)` · `ChromaDB` · `Sentence-Transformers` · `MongoDB Atlas` · `React 18 + TypeScript`
 
 </div>
 
@@ -39,9 +39,9 @@
 | | |
 |---|---|
 | **What** | A career-prep platform for students: resume bullets, skill-gap analysis + courses, mock interviews with scored feedback, job search, grad-school matching. |
-| **Core idea** | An **agentic orchestrator** turns one free-text request into a typed plan (`Decomposition`) via GPT-4o structured output, then runs only the needed modules **in parallel**. |
+| **Core idea** | An **agentic orchestrator** turns one free-text request into a typed plan (`Decomposition`) via LLM structured output (local **Ollama** by default, GPT-4o with one env var), then runs only the needed modules **in parallel**. |
 | **Grounding** | Modules are grounded in a **ChromaDB** index of O*NET occupation profiles (skills, knowledge, task statements) + career-recommendation records, embedded locally with `all-MiniLM-L6-v2`. |
-| **Quality** | 16 offline unit tests + an **eval harness** (`backend/evals/`) measuring routing P/R/F1, retrieval precision@k / MRR, and **LLM-as-a-judge** rubric scores for generated content. |
+| **Quality** | 17 offline unit tests + an **eval harness** (`backend/evals/`) measuring routing P/R/F1, retrieval precision@k / MRR, and **LLM-as-a-judge** rubric scores for generated content. |
 
 ---
 
@@ -93,7 +93,7 @@ flowchart LR
         EXT["Adzuna · USAJOBS<br/>Google NLP"]
     end
 
-    LLM{{"OpenAI GPT-4o / 4o-mini"}}
+    LLM{{"LLM via backend/llm.py<br/>Ollama llama3.2 · or GPT-4o"}}
 
     UI -->|"POST /query"| AUTH --> ORCH
     SIM --> IVR --> IV
@@ -123,7 +123,7 @@ flowchart LR
 | **Interview** | RAG-grounded questions + LLM-scored feedback | [backend/modules/interview.py](backend/modules/interview.py), [interview_router.py](backend/modules/interview_router.py) |
 | **Job search** | Adzuna + USAJOBS aggregation, scoring, Mongo cache | [job_searchv2.py](backend/modules/job_searchv2.py) (`/job-search`), [job_search.py](backend/modules/job_search.py) (orchestrator) |
 | **Grad school** | Program retrieval, fit score, SOP draft | [backend/modules/grad_school.py](backend/modules/grad_school.py) |
-| **Resume tailor** | JD keyword extraction → bullet rewrite → PDF | [backend/main.py#L519](backend/main.py#L519) |
+| **Resume tailor** | JD keyword extraction → bullet rewrite → PDF | [backend/main.py#L520](backend/main.py#L520) |
 | **Persistence** | Profiles, chat history, tailored resumes | [backend/database.py](backend/database.py) |
 | **Evals** | Golden set, metrics, LLM-as-a-judge | [backend/evals/](backend/evals/) |
 
@@ -138,7 +138,7 @@ sequenceDiagram
     participant API as FastAPI /query
     participant DB as MongoDB
     participant O as Orchestrator
-    participant L as GPT-4o
+    participant L as LLM (llm.py)
     participant M as Modules (parallel)
 
     U->>API: POST /query {query, history} + JWT
@@ -162,7 +162,7 @@ sequenceDiagram
     API-->>U: JSON → UI renders highlighted cards
 ```
 
-Key code: [`decompose()`](backend/orchestrator.py#L366) · [`run()`](backend/orchestrator.py#L393) · [`safe_execute_module()`](backend/orchestrator.py#L240) · [`build_ui_payload()`](backend/orchestrator.py#L351) · planner prompt [decomp_prompt.j2](backend/prompts/decomp_prompt.j2)
+Key code: [`decompose()`](backend/orchestrator.py#L368) · [`run()`](backend/orchestrator.py#L395) · [`safe_execute_module()`](backend/orchestrator.py#L242) · [`build_ui_payload()`](backend/orchestrator.py#L353) · planner prompt [decomp_prompt.j2](backend/prompts/decomp_prompt.j2)
 
 ---
 
@@ -224,15 +224,24 @@ Query construction differs per consumer:
 
 ## 6. Where LLMs are used
 
-| Where | Model | Purpose | How output is controlled |
+Every call goes through **[backend/llm.py](backend/llm.py)** (`[LLM-CONFIG]`). Modules ask for a *tier*, not a model name:
+
+| `LLM_PROVIDER` | `large` tier | `small` tier | Needs |
 |---|---|---|---|
-| [`orchestrator.decompose`](backend/orchestrator.py#L366) | gpt-4o | Plan: which modules + inputs | **Pydantic structured output** (`Decomposition`), rules in [decomp_prompt.j2](backend/prompts/decomp_prompt.j2) |
-| [`interview.generate_questions`](backend/modules/interview.py) | gpt-4o | Role-specific question | Grounded on RAG tasks + CSV question bank |
-| [`interview.generate_feedback`](backend/modules/interview.py#L142) | gpt-4o | **Runtime judge** of the user's answer + strengths/improvements | Anchored 0–1 scale, clamped, blended 60/40 with Google NLP sentiment |
-| [`grad_school.generate_sop`](backend/modules/grad_school.py) | gpt-4o-mini | SOP paragraph per program | Retrieved program metadata in prompt |
-| [`job_searchv2.extract_job_skills_openai`](backend/modules/job_searchv2.py) | gpt-4o-mini | Skill extraction from postings | `temperature=0` |
-| [`/resume/tailor`](backend/main.py#L519) | gpt-4o | JD keywords → bullet rewrites → PDF | Concurrent async calls, Jinja → xhtml2pdf |
-| [`evals/judge.py`](backend/evals/judge.py) | gpt-4o (configurable) | **Offline judge** of the system itself | Rubric + reasoning-before-score + structured output, `temperature=0` |
+| `ollama` *(default)* | `llama3.2:3b` | `llama3.2:3b` | `ollama serve` running locally |
+| `openai` | `gpt-4o` | `gpt-4o-mini` | `OPENAI_API_KEY` |
+
+Override models with `OLLAMA_MODEL_LARGE` / `OLLAMA_MODEL_SMALL` (or the `OPENAI_` equivalents). LangChain sites use `ChatOllama` (native structured output); OpenAI-SDK sites hit Ollama's OpenAI-compatible `/v1` endpoint, so the call code is identical for both providers.
+
+| Where | Tier | Purpose | How output is controlled |
+|---|---|---|---|
+| [`orchestrator.decompose`](backend/orchestrator.py#L368) | large | Plan: which modules + inputs | **Pydantic structured output** (`Decomposition`), rules in [decomp_prompt.j2](backend/prompts/decomp_prompt.j2) |
+| [`interview.generate_questions`](backend/modules/interview.py) | large | Role-specific question | Grounded on RAG tasks + CSV question bank |
+| [`interview.generate_feedback`](backend/modules/interview.py#L143) | large | **Runtime judge** of the user's answer + strengths/improvements | Anchored 0–1 scale, clamped, blended 60/40 with Google NLP sentiment |
+| [`grad_school.generate_sop`](backend/modules/grad_school.py) | small | SOP paragraph per program | Retrieved program metadata in prompt |
+| [`job_searchv2.extract_job_skills_openai`](backend/modules/job_searchv2.py) | small | Skill extraction from postings | `temperature=0` |
+| [`/resume/tailor`](backend/main.py#L520) | large | JD keywords → bullet rewrites → PDF | Concurrent async calls, Jinja → xhtml2pdf |
+| [`evals/judge.py`](backend/evals/judge.py) | large (or `--judge-model`) | **Offline judge** of the system itself | Rubric + reasoning-before-score + structured output, `temperature=0` |
 
 > The resume-bullet module itself is **retrieval + templates, not an LLM**: deterministic, free, and impossible to
 > hallucinate skills the student doesn't have. The eval harness measures what that costs in fluency.
@@ -254,7 +263,7 @@ flowchart TB
 ### 7.1 Unit tests · `backend/tests/` (no network, no API key)
 
 ```bash
-cd backend && python -m pytest -q        # 16 passed
+cd backend && python -m pytest -q        # 17 passed
 ```
 - [test_evals.py](backend/tests/test_evals.py): metrics math, judge prompt/score plumbing with a **fake LLM**, chunk format + PII drop, the **real** `Decomposition` schema, UI card ordering.
 - [test_main.py](backend/tests/test_main.py): `/query` rejects missing or invalid JWTs (401).
@@ -273,7 +282,7 @@ cd backend && python -m pytest -q        # 16 passed
 cd backend
 python -m evals.run_evals                                   # all suites
 python -m evals.run_evals --suite routing                   # one suite
-python -m evals.run_evals --suite retrieval --limit 2 --judge-model gpt-4o-mini   # cheap smoke run
+python -m evals.run_evals --suite retrieval --limit 2 --judge-model gemma4:e4b   # judge from a different model family
 ```
 Each run writes `backend/evals/results/eval_<timestamp>.json` so runs can be diffed after prompt / model / chunking changes.
 
@@ -281,7 +290,7 @@ Each run writes `backend/evals/results/eval_<timestamp>.json` so runs can be dif
 
 | Technique | Why |
 |---|---|
-| **Explicit rubric with 1 vs 5 anchors** ([`RESUME_BULLET_RUBRIC`](backend/evals/judge.py#L30), [`INTERVIEW_FEEDBACK_RUBRIC`](backend/evals/judge.py#L39)) | Vague "rate the quality" prompts produce unstable scores. |
+| **Explicit rubric with 1 vs 5 anchors** ([`RESUME_BULLET_RUBRIC`](backend/evals/judge.py#L31), [`INTERVIEW_FEEDBACK_RUBRIC`](backend/evals/judge.py#L40)) | Vague "rate the quality" prompts produce unstable scores. |
 | **`reasoning` field comes before `score`** in the Pydantic schema | The model commits to evidence first; the number follows from it. |
 | **Structured output** (`RubricVerdict`, `RelevanceVerdict`), `score: int = Field(ge=1, le=5)` | Always parseable; out-of-range scores are rejected by validation (unit-tested). |
 | **Binary labels for retrieval** | Easier to judge reliably than a graded score; maps directly onto precision@k and MRR. |
@@ -300,6 +309,7 @@ Each run writes `backend/evals/results/eval_<timestamp>.json` so runs can be dif
 | **Structured-output planner** (Pydantic `Decomposition`) | ReAct / tool-calling loop; keyword router | One LLM round-trip with typed inputs: predictable latency and cost, trivially testable. A ReAct loop adds turns we don't need for one-shot routing. |
 | **Parallel fan-out** with `asyncio.TaskGroup` + 120s timeout + `safe_execute_module` | Sequential calls | Latency ≈ slowest module (G3). Per-module error isolation means a flaky job API doesn't kill resume output. |
 | **Deterministic response shaping** (`build_ui_payload`) instead of a 2nd "synthesis" LLM call | LLM summary ([final_prompt.j2](backend/prompts/final_prompt.j2), earlier design) | Removes a full LLM round-trip and a hallucination surface; the UI renders structured cards anyway. |
+| **Provider-agnostic LLM layer** ([llm.py](backend/llm.py)), local Ollama by default | Hard-coded OpenAI everywhere | Zero-cost local dev and demos, no key to leak; GPT-4o is one env var away for quality. The eval harness is how you decide whether the smaller model is good enough. |
 | **Local embeddings** (MiniLM) | OpenAI `text-embedding-3-small` | Zero cost and no network at ingest/query; quality is adequate for short, structured chunks. Swap point is a single function. |
 | **Record-level chunks** | Fixed 512-token windows | See [§5 RAG pipeline](#5-rag-pipeline). |
 | **Template-based resume bullets** (`/query`) + **LLM rewrite** (`/resume/tailor`) | LLM-only bullets | Fast, free, non-hallucinating default; the LLM path is opt-in when the user supplies a real JD. |
@@ -326,12 +336,12 @@ Being upfront about these is part of the design:
 | Min | Show | Open | Talking point |
 |---|---|---|---|
 | 0–1 | The product | Run the app → `/orchestrator`, ask *"find my skill gaps and write resume bullets for data science"* | Two cards light up from one sentence. |
-| 1–3 | **Planning** | [orchestrator.py#L167](backend/orchestrator.py#L167) → [`decompose()`](backend/orchestrator.py#L366) → [decomp_prompt.j2](backend/prompts/decomp_prompt.j2) | Schema-constrained planning; context budgeting. |
-| 3–4 | **Parallel execution** | [`run()`](backend/orchestrator.py#L393) | TaskGroup, timeout, failure isolation. |
+| 1–3 | **Planning** | [orchestrator.py#L167](backend/orchestrator.py#L167) → [`decompose()`](backend/orchestrator.py#L368) → [decomp_prompt.j2](backend/prompts/decomp_prompt.j2) | Schema-constrained planning; context budgeting. |
+| 3–4 | **Parallel execution** | [`run()`](backend/orchestrator.py#L395) | TaskGroup, timeout, failure isolation. |
 | 4–6 | **Chunking** | [rag/chunking.py](backend/rag/chunking.py) | Record-level vs fixed windows; 256-token limit; metadata for filtering. |
 | 6–7 | **Retrieval** | [`query_jobs()`](backend/rag/retriever.py#L33) | Filter → dense → fallback. |
 | 7–9 | **Evaluation** | [judge.py](backend/evals/judge.py) → [run_evals.py](backend/evals/run_evals.py) → [golden_set.json](backend/evals/golden_set.json) | Deterministic where possible, judge where necessary; how you'd trust the judge. |
-| 9–10 | **Runtime judge** | [interview.py#L179](backend/modules/interview.py#L179) | LLM score blended with sentiment; the offline judge grades *this* feedback. |
+| 9–10 | **Runtime judge** | [interview.py#L180](backend/modules/interview.py#L180) | LLM score blended with sentiment; the offline judge grades *this* feedback. |
 
 **Jump-to tags:** search the repo (VS Code: `Ctrl+Shift+F`) for:
 
@@ -342,17 +352,19 @@ Being upfront about these is part of the design:
 | `[RAG-5 RETRIEVE]` | [retriever.py](backend/rag/retriever.py) |
 | `[ORCH-1 PLAN]` `[ORCH-2 EXECUTE]` `[ORCH-3 RESPOND]` | [orchestrator.py](backend/orchestrator.py) |
 | `[LLM-JUDGE]` / `[LLM-JUDGE runtime]` | [evals/judge.py](backend/evals/judge.py) / [interview.py](backend/modules/interview.py) |
+| `[LLM-CONFIG]` | [llm.py](backend/llm.py) |
 | `[EVAL]` | [evals/run_evals.py](backend/evals/run_evals.py), [evals/metrics.py](backend/evals/metrics.py) |
 
 ---
 
 ## 11. Running locally
 
-**Prerequisites:** Python 3.10+ (3.12 tested), Node 18+, a MongoDB Atlas cluster, an OpenAI API key.
+**Prerequisites:** Python 3.10+ (3.12 tested), Node 18+, a MongoDB Atlas cluster, and **[Ollama](https://ollama.com)** (or an OpenAI API key with `LLM_PROVIDER=openai`).
 
 ```bash
 # 1. Configure secrets
-cp .env.example .env            # fill in MONGO_URI, OPENAI_API_KEY, JWT_SECRET, ...
+cp .env.example .env            # fill in MONGO_URI, JWT_SECRET, ...
+ollama pull llama3.2:3b         # local LLM (default provider)
 
 # 2. Backend
 cd backend
@@ -372,7 +384,7 @@ cd frontend && npm install && npm run dev
 
 # 6. Quality
 cd backend && python -m pytest -q                    # offline unit tests
-python -m evals.run_evals --suite routing            # live eval (needs OPENAI_API_KEY)
+python -m evals.run_evals --suite routing            # live eval against the active provider
 ```
 
 ---
@@ -387,6 +399,7 @@ python -m evals.run_evals --suite routing            # live eval (needs OPENAI_A
 ├── backend/
 │   ├── main.py                   ← FastAPI app: auth, profile, /query, /resume/tailor, /job-search
 │   ├── orchestrator.py           ← [ORCH-*] plan → parallel execute → UI payload
+│   ├── llm.py                    ← [LLM-CONFIG] provider switch: Ollama (default) / OpenAI
 │   ├── prompts/                  ← Jinja prompt templates (planner)
 │   ├── rag/
 │   │   ├── chunking.py           ← [RAG-2] chunk builders

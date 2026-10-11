@@ -37,22 +37,28 @@ from typing import Any, Dict
 EMBEDDING_TOKEN_LIMIT = 256
 
 
+def _join_names(items: list) -> str:
+    # O*NET items are dicts ({'name': ..., 'importance': ...}); career recs are plain strings.
+    names = [item.get("name", "") if isinstance(item, dict) else str(item) for item in items]
+    return ", ".join(n for n in names if n)
+
+
 def parse_list_field(value: Any) -> str:
     """
-    O*NET stores skills/knowledge as stringified lists of dicts like:
-    "[{'name': 'Programming', 'importance': 4.0}, ...]"
-    Extract just the names as a clean comma-separated string.
+    Normalise a skills/knowledge field into a clean comma-separated string. Handles:
+      * O*NET stringified lists of dicts: "[{'name': 'Programming', 'importance': 4.0}, ...]"
+      * real lists of dicts or of plain strings: ['Research', 'Python']  (ai-based_career_recs)
+      * plain strings, returned as-is: "HTML, CSS"
     """
     if not value:
         return ""
     if isinstance(value, list):
-        # Already a real list of dicts
-        return ", ".join(item.get("name", "") for item in value if isinstance(item, dict))
+        return _join_names(value)
     if isinstance(value, str):
         try:
             parsed = ast.literal_eval(value)
             if isinstance(parsed, list):
-                return ", ".join(item.get("name", "") for item in parsed if isinstance(item, dict))
+                return _join_names(parsed)
         except Exception:
             pass
         return value

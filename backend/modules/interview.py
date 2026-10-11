@@ -3,6 +3,7 @@ import os
 
 import pandas as pd
 from openai import OpenAI
+from llm import get_openai_client, model_name
 import requests
 import json
 from dotenv import load_dotenv
@@ -12,7 +13,7 @@ load_dotenv()
 
 
 def _openai_client() -> OpenAI:
-    return OpenAI(api_key=os.getenv("OPENAI_API_KEY") or os.getenv("API_KEY"))
+    return get_openai_client()
 
 
 def _google_nlp_key() -> str | None:
@@ -109,7 +110,7 @@ def generate_questions(selection, data, title, client):
 
 
      response = client.chat.completions.create(
-      model="gpt-4o",
+      model=model_name("large"),
       messages=[
        {"role": "system", "content": "You are an expert interviewer."},
        {"role": "user", "content": prompt}
@@ -126,7 +127,7 @@ def generate_questions(selection, data, title, client):
 
 
         response = client.chat.completions.create(
-         model="gpt-4o",
+         model=model_name("large"),
          messages=[
        {"role": "system", "content": "You are an expert interviewer."},
        {"role": "user", "content": prompt}
@@ -144,7 +145,7 @@ def generate_feedback(question, answer, client):
 
 
     response = client.chat.completions.create(
-        model="gpt-4o",
+        model=model_name("large"),
         messages=[
             {"role": "system", "content": "You are an expert interviewer."},
             {"role": "user", "content": prompt}
@@ -176,7 +177,7 @@ def generate_feedback(question, answer, client):
             score = 0.0
 
 
-    # [LLM-JUDGE runtime] gpt-4o grades the *candidate's* answer on an anchored 0-1 scale.
+    # [LLM-JUDGE runtime] the large-tier LLM grades the *candidate's* answer on an anchored 0-1 scale.
     # It is blended below with Google NLP sentiment (60/40) so a confident-sounding but
     # empty answer can't score high on tone alone. The offline judge in evals/ grades
     # *this feedback* in turn (evals/run_evals.py --suite interview).
@@ -191,7 +192,7 @@ def generate_feedback(question, answer, client):
     Return ONLY a number between 0 and 1, nothing else."""
 
     quality_response = client.chat.completions.create(
-        model="gpt-4o",
+        model=model_name("large"),
         messages=[
             {"role": "system", "content": "You are an expert interview evaluator."},
             {"role": "user", "content": quality_prompt}
@@ -226,7 +227,7 @@ def generate_feedback(question, answer, client):
 
 
     list = client.chat.completions.create(
-        model="gpt-4o",
+        model=model_name("large"),
         messages=[
             {"role": "system", "content": "You are an expert interviewer."},
             {"role": "user", "content": prompt}
@@ -241,7 +242,7 @@ def generate_feedback(question, answer, client):
 
 
     strength_response = client.chat.completions.create(
-        model="gpt-4o",
+        model=model_name("large"),
         messages=[
             {"role": "system", "content": "You are an expert interviewer."},
             {"role": "user", "content": prompt}
@@ -255,7 +256,7 @@ def generate_feedback(question, answer, client):
 
 
     improvement_response = client.chat.completions.create(
-        model="gpt-4o",
+        model=model_name("large"),
         messages=[
             {"role": "system", "content": "You are an expert interviewer."},
             {"role": "user", "content": prompt}

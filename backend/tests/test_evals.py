@@ -118,6 +118,12 @@ def test_career_rec_chunk_drops_pii():
     assert meta["title"] == "Web Developer" and meta["source"] == "career_recs"
 
 
+def test_parse_list_field_handles_list_of_strings():
+    # Regression: career-rec Skills are a list of strings; these used to be dropped entirely.
+    assert parse_list_field(["Research", "Statistical Analysis", "Python"]) == "Research, Statistical Analysis, Python"
+    assert parse_list_field("['SQL', 'Excel']") == "SQL, Excel"
+
+
 def test_parse_list_field_handles_plain_strings():
     assert parse_list_field("HTML, CSS") == "HTML, CSS"
     assert parse_list_field(None) == ""

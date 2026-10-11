@@ -20,9 +20,10 @@ How we keep the judge honest
 
 from typing import Any, Dict, List, Optional
 
-from langchain.chat_models import init_chat_model
 from langchain.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
+
+from llm import get_chat_model
 
 # ── Rubrics ────────────────────────────────────────────────────────────────
 # Each criterion: what a 1 looks like vs what a 5 looks like. Anchors matter more than wording.
@@ -81,9 +82,10 @@ class RelevanceVerdict(BaseModel):
 # ── Judge ──────────────────────────────────────────────────────────────────
 
 class LLMJudge:
-    def __init__(self, model: str = "gpt-4o", llm: Optional[Any] = None):
+    def __init__(self, model: Optional[str] = None, llm: Optional[Any] = None):
         # `llm` lets tests inject a fake model; production builds a real chat model.
-        self.llm = llm or init_chat_model(model=model, temperature=0)
+        # model=None -> the provider's 'large' tier (see llm.py).
+        self.llm = llm or get_chat_model("large", model=model, temperature=0)
 
     def _invoke(self, schema, user_prompt: str):
         structured = self.llm.with_structured_output(schema)

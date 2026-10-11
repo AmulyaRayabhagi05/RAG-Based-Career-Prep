@@ -6,7 +6,7 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from database import mongo
 from dotenv import load_dotenv
-from openai import OpenAI
+from llm import get_openai_client, model_name
 
 # Load env 
 load_dotenv()
@@ -25,7 +25,7 @@ except:
 class GradSchoolPrep:
     def __init__(self):
         self.collection = grad_collection
-        self.openai_client = OpenAI()
+        self.openai_client = get_openai_client()
 
     async def load_data_if_empty(self):
         if self.collection.count() == 0:
@@ -108,7 +108,7 @@ class GradSchoolPrep:
         """
 
         response = self.openai_client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=model_name("small"),
         messages=[{"role": "user", "content": prompt}]
         )
 

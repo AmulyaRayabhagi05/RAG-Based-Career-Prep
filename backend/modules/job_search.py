@@ -5,7 +5,7 @@ import re
 import certifi
 import requests
 import json
-from openai import OpenAI
+from llm import get_openai_client, model_name
 from collections import Counter
 from typing import Dict, Any, List
 
@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 from pymongo import MongoClient
 
 load_dotenv()
-openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+openai_client = get_openai_client()
 #Reads Mongo thing.
 MONGODB_URI = os.getenv("MONGO_URI")
 MONGODB_DB = os.getenv("DB_NAME", "elevatr_db")
@@ -63,7 +63,7 @@ Description: {description[:2000]}
 
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model_name("small"),
             messages=[{"role": "user", "content": prompt}],
             temperature=0
         )
