@@ -1,0 +1,82 @@
+{
+  "_about": "Hand-labelled evaluation cases. Add a case whenever a bug is found so it can never regress silently.",
+
+  "routing": [
+    {
+      "id": "route-resume-only",
+      "query": "Can you rewrite my resume bullets for a data analyst role?",
+      "profile": {"major": "Statistics", "skills": ["SQL", "Excel", "Python"], "target_job": "Data Analyst"},
+      "expected_modules": ["resume_builder"]
+    },
+    {
+      "id": "route-skill-gap-only",
+      "query": "What skills am I missing to become a cloud engineer?",
+      "profile": {"major": "Computer Science", "skills": ["Python", "Linux"], "target_job": "Cloud Engineer"},
+      "expected_modules": ["skill_gap"]
+    },
+    {
+      "id": "route-multi-intent",
+      "query": "Find my skill gaps for software engineering and generate resume bullets for it",
+      "profile": {"major": "Computer Science", "skills": ["Python", "Java"], "target_job": "Software Engineer"},
+      "expected_modules": ["skill_gap", "resume_builder"]
+    },
+    {
+      "id": "route-interview",
+      "query": "I have a behavioral interview next week, help me practice",
+      "profile": {"major": "Business", "skills": ["Communication"], "target_job": "Product Manager"},
+      "expected_modules": ["interview"]
+    },
+    {
+      "id": "route-jobs",
+      "query": "Show me internships in Austin that match my profile",
+      "profile": {"major": "Computer Science", "skills": ["React", "Node.js"], "location_preference": ["Austin, TX"]},
+      "expected_modules": ["job_search"]
+    },
+    {
+      "id": "route-grad",
+      "query": "Which master's programs am I competitive for with a 3.6 GPA?",
+      "profile": {"major": "Electrical Engineering", "gpa": 3.6, "coursework": ["Signals and Systems"]},
+      "expected_modules": ["grad_school"]
+    },
+    {
+      "id": "route-three-way",
+      "query": "I want to become an ML engineer: what am I missing, what jobs are open, and how do I prep for interviews?",
+      "profile": {"major": "Computer Science", "skills": ["Python", "PyTorch"], "target_job": "Machine Learning Engineer"},
+      "expected_modules": ["skill_gap", "job_search", "interview"]
+    },
+    {
+      "id": "route-indirect-phrasing",
+      "query": "Recruiters keep ignoring my applications for security analyst roles, what should I fix on my CV?",
+      "profile": {"major": "Information Systems", "skills": ["Networking", "Splunk"], "target_job": "Information Security Analyst"},
+      "expected_modules": ["resume_builder"]
+    }
+  ],
+
+  "retrieval": [
+    {"id": "ret-exact-title", "target_role": "Software Developers",
+     "profile": {"skills": ["Python", "Git", "REST APIs"], "coursework": ["Data Structures"], "major": "Computer Science"}},
+    {"id": "ret-data-science", "target_role": "Data Scientists",
+     "profile": {"skills": ["Python", "Machine Learning", "SQL"], "coursework": ["Statistics"], "major": "Mathematics"}},
+    {"id": "ret-colloquial-title", "target_role": "SWE",
+     "profile": {"skills": ["Java", "Spring", "Docker"], "major": "Computer Science"},
+     "_note": "Not an O*NET title: exercises the semantic-search fallback in query_jobs()."},
+    {"id": "ret-non-tech", "target_role": "Registered Nurses",
+     "profile": {"skills": ["Patient Care", "CPR"], "coursework": ["Anatomy"], "major": "Nursing"}}
+  ],
+
+  "resume": [
+    {"id": "resume-cs", "target_role": "Software Developers",
+     "profile": {"skills": ["Python", "React", "PostgreSQL"], "coursework": ["Databases"], "projects": ["Course scheduling web app"], "major": "Computer Science", "target_role": "Software Developers"}},
+    {"id": "resume-data", "target_role": "Data Scientists",
+     "profile": {"skills": ["Python", "Pandas", "Scikit-learn"], "coursework": ["Machine Learning"], "projects": ["Churn prediction model"], "major": "Statistics", "target_role": "Data Scientists"}}
+  ],
+
+  "interview": [
+    {
+      "id": "iv-tell-me",
+      "question": "Tell me about a time you resolved a conflict on a team.",
+      "strong_answer": "On my capstone team, two teammates disagreed on whether to use Firebase or Postgres. I set up a 30-minute meeting, had each write down requirements, and we scored both options against them. We picked Postgres for relational queries, and I paired with the Firebase advocate to migrate our prototype. We shipped on time and both teammates said the process felt fair.",
+      "weak_answer": "I don't really have conflicts, I get along with everyone."
+    }
+  ]
+}

@@ -176,6 +176,10 @@ def generate_feedback(question, answer, client):
             score = 0.0
 
 
+    # [LLM-JUDGE runtime] gpt-4o grades the *candidate's* answer on an anchored 0-1 scale.
+    # It is blended below with Google NLP sentiment (60/40) so a confident-sounding but
+    # empty answer can't score high on tone alone. The offline judge in evals/ grades
+    # *this feedback* in turn (evals/run_evals.py --suite interview).
     quality_prompt = f"""Rate this interview answer quality from 0 to 1 where:
     1.0 = excellent, detailed, highly relevant
     0.5 = good but missing some points

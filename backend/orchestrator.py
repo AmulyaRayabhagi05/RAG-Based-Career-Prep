@@ -1,6 +1,19 @@
 
+"""
+Agentic orchestrator: one natural-language query -> N specialised modules, run in parallel.
+
+    [ORCH-1 PLAN]     gpt-4o + structured output decomposes the query into typed SubTasks
+    [ORCH-2 EXECUTE]  each SubTask runs concurrently (asyncio.TaskGroup, 120s budget);
+                      a failing module is isolated and cannot take the others down
+    [ORCH-3 RESPOND]  results are shaped into a deterministic UI payload (cards, order,
+                      guidance sentence) instead of a second free-form LLM call
+
+Routing quality is measured by evals/run_evals.py --suite routing.
+"""
+
 import asyncio
 import json
+import os
 from typing import Any, Dict, List, Optional, Union
 
 from dotenv import load_dotenv
@@ -14,7 +27,9 @@ from modules.job_search import run_job_search
 from modules.resume_builder import generate_resume
 from modules.skill_gap import run_skill_gap_module
 
-jinja_env = Environment(loader=FileSystemLoader("prompts"))
+# Absolute path so the orchestrator works no matter which directory it is launched from.
+PROMPTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "prompts")
+jinja_env = Environment(loader=FileSystemLoader(PROMPTS_DIR))
 
 load_dotenv()
 
@@ -146,6 +161,9 @@ class EmptyInput(BaseModel):
     pass
 
 
+# [ORCH-1 PLAN] The planner's output contract. `with_structured_output(Decomposition)`
+# turns this Pydantic schema into a JSON schema / function-calling spec, so the LLM can
+# only answer with known modules and typed inputs; no regex parsing of free text.
 class SubTask(BaseModel):
     module: str = Field(description="The target module name")
     inputs: Union[
@@ -345,8 +363,11 @@ def build_ui_payload(query: str, triggered_modules: List[str], results: Dict[str
     }
 
 
-async def run(user_id: str, query: str, student_profile: dict, history: Optional[list] = None):
+async def decompose(query: str, student_profile: dict, history: Optional[list] = None) -> Decomposition:
+    """[ORCH-1 PLAN] Ask the LLM which modules to call and with what inputs."""
     history = compact_history(history or [])
+    # Context budgeting: only the last MAX_HISTORY_MESSAGES turns and truncated free-text
+    # fields are sent, which bounds prompt size (cost + latency) regardless of user data.
     compacted_profile = compact_student_profile(student_profile)
 
     decomp_template = jinja_env.get_template("decomp_prompt.j2")
@@ -365,9 +386,17 @@ async def run(user_id: str, query: str, student_profile: dict, history: Optional
     conversation.append(HumanMessage(f"Query: {truncate_text(query, 1200)}"))
 
     structured_model = model.with_structured_output(Decomposition)
-    response = await asyncio.to_thread(structured_model.invoke, conversation)
+    # The LangChain call is blocking; run it in a thread so the event loop keeps serving requests.
+    return await asyncio.to_thread(structured_model.invoke, conversation)
+
+
+async def run(user_id: str, query: str, student_profile: dict, history: Optional[list] = None):
+    response = await decompose(query, student_profile, history)
+    # De-duplicate while preserving the planner's order (it is also the UI card order).
     triggered_modules = list(dict.fromkeys(task.module for task in response.sub_tasks))
 
+    # [ORCH-2 EXECUTE] Fan out. safe_execute_module never raises, so one module's
+    # exception becomes an error field in its own result instead of cancelling the group.
     execution_list = []
     try:
         async with asyncio.timeout(120.0):
@@ -383,6 +412,7 @@ async def run(user_id: str, query: str, student_profile: dict, history: Optional
         payload = task.result()
         results[payload["module"]] = payload["result"]
 
+    # [ORCH-3 RESPOND] Deterministic shaping: no extra LLM call, so no extra latency or hallucination.
     ui = build_ui_payload(query, triggered_modules, results)
     guidance_sentence = ui["guidance_sentence"]
 

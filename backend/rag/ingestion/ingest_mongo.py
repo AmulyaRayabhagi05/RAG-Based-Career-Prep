@@ -1,10 +1,30 @@
+"""
+Offline ingestion pipeline: MongoDB -> chunks -> embeddings -> ChromaDB.
+
+    [RAG-1 LOAD]   read raw records from MongoDB Atlas
+    [RAG-2 CHUNK]  flatten each record into one labelled text chunk   (rag/chunking.py)
+    [RAG-3 EMBED]  encode each chunk with all-MiniLM-L6-v2 (384-dim)
+    [RAG-4 INDEX]  batch-write vectors + text + metadata into Chroma (HNSW, cosine)
+
+Run from backend/:   python rag/ingestion/ingest_mongo.py
+This is a full rebuild: the `jobs` collection is dropped and re-created every run,
+which keeps the index idempotent (no duplicate chunks across re-runs).
+"""
+
 import os
+import sys
 import uuid
-import ast
+
 from dotenv import load_dotenv
 from pymongo import MongoClient
 import chromadb
 from sentence_transformers import SentenceTransformer
+
+BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if BACKEND_DIR not in sys.path:
+    sys.path.insert(0, BACKEND_DIR)
+
+from rag.chunking import build_career_rec_chunk, build_onet_chunk
 
 # --- Setup Environment Variables ---
 load_dotenv()
@@ -16,134 +36,68 @@ db = client["elevatr_db"]
 career_recs_collection = db["ai-based_career_recs"]
 onet_collection = db["onet_occupations"]
 
-# --- Setup Embedding Model ---
+# --- [RAG-3 EMBED] Embedding model ---
+# all-MiniLM-L6-v2: 384-dim sentence embeddings, ~80MB, runs on CPU.
+# Chosen for zero API cost and low latency; the SAME model must be used at query
+# time (rag/retriever.py), otherwise query and document vectors live in different spaces.
 embed_model = SentenceTransformer("all-MiniLM-L6-v2")
 
-# --- Setup Chroma ---
+# --- [RAG-4 INDEX] Chroma persistent store ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 db_path = os.path.join(BASE_DIR, "chroma_db")
 chroma_client = chromadb.PersistentClient(path=db_path)
-
-try:
-    chroma_client.delete_collection(name="jobs")
-    print("  Cleared existing 'jobs' collection")
-except Exception:
-    pass
-
-jobs_chroma = chroma_client.get_or_create_collection(
-    name="jobs",
-    metadata={"hnsw:space": "cosine"}
-)
 
 
 def embed_text(text: str) -> list:
     return embed_model.encode(text).tolist()
 
 
-def parse_list_field(value) -> str:
-    """
-    O*NET stores skills/knowledge as stringified lists of dicts like:
-    "[{'name': 'Programming', 'importance': 4.0}, ...]"
-    Extract just the names as a clean comma-separated string.
-    """
-    if not value:
-        return ""
-    if isinstance(value, list):
-        # Already a real list of dicts
-        return ", ".join(item.get("name", "") for item in value if isinstance(item, dict))
-    if isinstance(value, str):
-        try:
-            parsed = ast.literal_eval(value)
-            if isinstance(parsed, list):
-                return ", ".join(item.get("name", "") for item in parsed if isinstance(item, dict))
-        except Exception:
-            pass
-        return value
-    return str(value)
+def reset_jobs_collection():
+    """Drop and re-create the `jobs` collection (full rebuild, keeps ingestion idempotent)."""
+    try:
+        chroma_client.delete_collection(name="jobs")
+        print("  Cleared existing 'jobs' collection")
+    except Exception:
+        pass
 
-
-def parse_task_statements(value) -> str:
-    """Parse task_statements which is a stringified list of strings."""
-    if not value:
-        return ""
-    if isinstance(value, list):
-        return " ".join(value)
-    if isinstance(value, str):
-        try:
-            parsed = ast.literal_eval(value)
-            if isinstance(parsed, list):
-                return " ".join(str(t) for t in parsed)
-        except Exception:
-            pass
-        return value
-    return str(value)
+    # hnsw:space=cosine -> similarity is direction-only, which is what sentence
+    # embeddings are trained for. (Chroma's default is L2.)
+    return chroma_client.get_or_create_collection(
+        name="jobs",
+        metadata={"hnsw:space": "cosine"}
+    )
 
 
 def ingest_all():
+    jobs_chroma = reset_jobs_collection()
     ids, embeddings, documents, metadatas = [], [], [], []
 
+    def add_chunk(text: str, metadata: dict):
+        ids.append(str(uuid.uuid4()))
+        embeddings.append(embed_text(text))   # [RAG-3 EMBED]
+        documents.append(text)                # raw text is stored so the generator can read it
+        metadatas.append(metadata)            # title/source/mongo_id for filtering + attribution
+
     # ── 1. ai-based_career_recs ──────────────────────────────────────────
-    # Fields: CandidateID, Name, Age, Education, Skills, Interests, Recommended_Career
+    # [RAG-1 LOAD] -> [RAG-2 CHUNK]: one row = one chunk
     career_docs = list(career_recs_collection.find())
     print(f" Found {len(career_docs)} docs in ai-based_career_recs")
-
     for doc in career_docs:
-        title    = doc.get("Recommended_Career", "")
-        skills    = parse_list_field(doc.get("Skills", ""))
-        interests = parse_list_field(doc.get("Interests", ""))
-        education = doc.get("Education", "")
-
-        text = (
-            f"Job Title: {title}\n"
-            f"Skills: {skills}\n"
-            f"Interests: {interests}\n"
-            f"Education: {education}"
-        )
-
-        ids.append(str(uuid.uuid4()))
-        embeddings.append(embed_text(text))
-        documents.append(text)
-        metadatas.append({
-            "title": title,
-            "source": "career_recs",
-            "mongo_id": str(doc.get("_id", ""))
-        })
+        add_chunk(*build_career_rec_chunk(doc))
 
     # ── 2. onet_occupations ──────────────────────────────────────────────
-    # Fields: soc_code, occupation_title, occupation_description,
-    #         job_zone, skills, knowledge, abilities, task_statements
+    # [RAG-1 LOAD] -> [RAG-2 CHUNK]: one occupation = one chunk
     onet_docs = list(onet_collection.find())
     print(f" Found {len(onet_docs)} docs in onet_occupations")
-
     for doc in onet_docs:
-        title       = doc.get("occupation_title", "")
-        description = doc.get("occupation_description", "")
-        skills      = parse_list_field(doc.get("skills", ""))
-        knowledge   = parse_list_field(doc.get("knowledge", ""))
-        tasks       = parse_task_statements(doc.get("task_statements", ""))
+        add_chunk(*build_onet_chunk(doc))
 
-        text = (
-            f"Job Title: {title}\n"
-            f"Description: {description}\n"
-            f"Skills: {skills}\n"
-            f"Knowledge: {knowledge}\n"
-            f"Tasks: {tasks}"
-        )
-
-        ids.append(str(uuid.uuid4()))
-        embeddings.append(embed_text(text))
-        documents.append(text)
-        metadatas.append({
-            "title": title,
-            "source": "onet",
-            "mongo_id": str(doc.get("_id", ""))
-        })
-
-    # ── 3. Batch insert ──────────────────────────────────────────────────
+    # ── 3. [RAG-4 INDEX] Batch insert ────────────────────────────────────
     if not ids:
         print("  No documents found. Check your MongoDB connection.")
         return
 
+    # Chroma caps a single add() call (~5k records); 2000 keeps each request small.
     BATCH_SIZE = 2000
     for i in range(0, len(ids), BATCH_SIZE):
         jobs_chroma.add(
@@ -171,5 +125,3 @@ def debug_sample():
 if __name__ == "__main__":
     # debug_sample()
     ingest_all()
-
-
