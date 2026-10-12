@@ -17,7 +17,7 @@
 
 ---
 
-## The 30-second pitch
+## Overview
 
 Students juggle a resume tool, a job board, interview prep and grad-school research, and none of them know what a target role actually requires.
 In Elevatr a student types one request. An **orchestrator** asks an LLM for a typed plan, runs only the needed modules **in parallel**,
@@ -36,12 +36,8 @@ flowchart LR
 
 ## Walkthrough: 7 stops
 
-### Stop 1 · The product (1 min)
-**Open:** the app → `/orchestrator`. Type *"Find my skill gaps for data science and write resume bullets."*
-**What happens:** one sentence lights up two tool cards (Skill Gap + Resume Builder), and the other tools stay available below.
-**Concept:** *agentic routing*: the user describes a goal, not a tool.
 
-### Stop 2 · Planning: the LLM makes a typed plan · [orchestrator.py](backend/orchestrator.py#L368)
+### Planning: the LLM makes a typed plan · [orchestrator.py](backend/orchestrator.py#L368)
 | Code | What it does |
 |---|---|
 | [`SubTask` / `Decomposition`](backend/orchestrator.py#L167) | Pydantic schema of the plan: a list of `{module, typed inputs}`. |
@@ -52,7 +48,7 @@ flowchart LR
 **Concepts:** *structured output* (no regex parsing; invalid plans fail validation) · *context budgeting*.
 **If asked "why not a ReAct agent?"** → One LLM round-trip gives predictable latency and is easy to test. A multi-step tool loop isn't needed for one-shot routing.
 
-### Stop 3 · Execution: parallel, fault-isolated · [`run()`](backend/orchestrator.py#L395)
+###  Execution: parallel, fault-isolated · [`run()`](backend/orchestrator.py#L395)
 | Code | What it does |
 |---|---|
 | `asyncio.TaskGroup` + `asyncio.timeout(120)` | Runs every sub-task concurrently; latency ≈ the slowest module, not the sum. |
@@ -62,7 +58,7 @@ flowchart LR
 **Concepts:** *concurrency* · *error isolation* · *deterministic response shaping*.
 **Story:** error isolation also *hid* a bug: job search was `await`-ing a sync function and failed silently ([fix](backend/orchestrator.py#L215)). Lesson: isolated failures still need logging.
 
-### Stop 4 · Data & chunking · [rag/chunking.py](backend/rag/chunking.py) → [ingest_mongo.py](backend/rag/ingestion/ingest_mongo.py#L71)
+### Data & chunking · [rag/chunking.py](backend/rag/chunking.py) → [ingest_mongo.py](backend/rag/ingestion/ingest_mongo.py#L71)
 | Code | What it does |
 |---|---|
 | [`build_onet_chunk()`](backend/rag/chunking.py#L106) | **One occupation = one chunk**: `Job Title / Description / Skills / Knowledge / Tasks`, plus metadata `{title, source, mongo_id}`. |
@@ -73,7 +69,7 @@ flowchart LR
 **Concepts:** *record-level chunking* (fixed windows would split an occupation from its title) · *title anchoring* · the embedder only reads **256 tokens**, so fields are ordered most-important-first.
 **Story:** a parser skipped list-of-strings skills, so **200/238 chunks had empty `Skills:`**. It failed silently and was caught by inspecting stored chunks. Fixed and regression-tested ([test](backend/tests/test_evals.py)).
 
-### Stop 5 · Retrieval · [`query_jobs()`](backend/rag/retriever.py#L33)
+### Retrieval · [`query_jobs()`](backend/rag/retriever.py#L33)
 | Code | What it does |
 |---|---|
 | [`retrieve_for_resume()`](backend/rag/retriever.py#L78) | Builds the query from skills + coursework + projects + major + target role, embedded with the same model. |
@@ -82,11 +78,11 @@ flowchart LR
 **Concepts:** *hybrid retrieval* (metadata filter + dense) · *graceful fallback*.
 **Numbers:** exact title "Data Scientists" → precision@5 **1.00**; colloquial "SWE" → fallback finds Backend/Front-end Developer, **0.60**.
 
-### Stop 6 · Provider-agnostic LLM layer · [llm.py](backend/llm.py#L48)
+### Provider-agnostic LLM layer · [llm.py](backend/llm.py#L48)
 Every LLM call asks for a **tier** (`large` / `small`), not a model name. `LLM_PROVIDER=ollama` (default, local, free) or `openai` (GPT-4o).
 **Concept:** swapping models is an env-var change, and the eval harness tells you whether the cheaper model is good enough.
 
-### Stop 7 · Evaluation & LLM-as-a-judge · [backend/evals/](backend/evals/)
+### Evaluation & LLM-as-a-judge · [backend/evals/](backend/evals/)
 | Suite | Method | Result (llama3.2:3b) |
 |---|---|---|
 | **Routing** ([code](backend/evals/run_evals.py#L53)) | Deterministic vs golden `expected_modules` (no judge needed) | recall **1.00**, precision **0.76**: never misses a module, over-triggers extras |
