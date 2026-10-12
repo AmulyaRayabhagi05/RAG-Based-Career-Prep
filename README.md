@@ -46,7 +46,7 @@ flowchart LR
 | [decomp_prompt.j2](backend/prompts/decomp_prompt.j2) | The planner's rules: only relevant modules, never invent fields. |
 
 **Concepts:** *structured output* (no regex parsing; invalid plans fail validation) · *context budgeting*.
-**If asked "why not a ReAct agent?"** → One LLM round-trip gives predictable latency and is easy to test. A multi-step tool loop isn't needed for one-shot routing.
+
 
 ###  Execution: parallel, fault-isolated · [`run()`](backend/orchestrator.py#L395)
 | Code | What it does |
@@ -55,8 +55,6 @@ flowchart LR
 | [`safe_execute_module()`](backend/orchestrator.py#L242) | Catches a module's exception and returns it as that module's `error`, so one failure can't cancel the others. |
 | [`build_ui_payload()`](backend/orchestrator.py#L353) | Shapes results into cards **without a second LLM call**: no extra latency, no hallucination surface. |
 
-**Concepts:** *concurrency* · *error isolation* · *deterministic response shaping*.
-**Story:** error isolation also *hid* a bug: job search was `await`-ing a sync function and failed silently ([fix](backend/orchestrator.py#L215)). Lesson: isolated failures still need logging.
 
 ### Data & chunking · [rag/chunking.py](backend/rag/chunking.py) → [ingest_mongo.py](backend/rag/ingestion/ingest_mongo.py#L71)
 | Code | What it does |
@@ -67,7 +65,6 @@ flowchart LR
 
 **What's indexed:** 38 O\*NET occupations + 200 career-rec records = **238 chunks**. Resumes are *parsed* into a profile, **not** embedded; the profile becomes the *query*.
 **Concepts:** *record-level chunking* (fixed windows would split an occupation from its title) · *title anchoring* · the embedder only reads **256 tokens**, so fields are ordered most-important-first.
-**Story:** a parser skipped list-of-strings skills, so **200/238 chunks had empty `Skills:`**. It failed silently and was caught by inspecting stored chunks. Fixed and regression-tested ([test](backend/tests/test_evals.py)).
 
 ### Retrieval · [`query_jobs()`](backend/rag/retriever.py#L33)
 | Code | What it does |
@@ -94,7 +91,7 @@ Every LLM call asks for a **tier** (`large` / `small`), not a model name. `LLM_P
 **Honest gap:** not yet calibrated against human labels. Next step: label ~30 examples and measure agreement.
 **Two kinds of judge:** the offline judge grades *the system*; a runtime judge in [interview.py](backend/modules/interview.py#L180) grades *the user's answer*.
 
-### Close · Limitations → next two weeks
+### Close · Limitations → hope to do in the future
 1. **Routing precision:** tighten the planner prompt; re-run `--suite routing` to prove it.
 2. **Interview scorer:** stronger model, plus judge calibration against human labels.
 3. **Data coverage:** add healthcare/other O\*NET occupations; add a reranker for precision@5.
