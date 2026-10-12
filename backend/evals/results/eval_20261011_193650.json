@@ -1,0 +1,85 @@
+{
+  "timestamp": "2026-10-11T19:33:20",
+  "provider": "ollama",
+  "judge_model": "llama3.2:3b",
+  "suites": {
+    "retrieval": {
+      "summary": {
+        "mean_precision@5": 0.6,
+        "hit_rate@5": 0.75,
+        "MRR": 0.75
+      },
+      "cases": [
+        {
+          "id": "ret-exact-title",
+          "target_role": "Software Developers",
+          "retrieved_titles": [
+            "Software Developers"
+          ],
+          "relevance": [
+            true
+          ],
+          "precision@5": 1.0,
+          "hit@5": true,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "ret-data-science",
+          "target_role": "Data Scientists",
+          "retrieved_titles": [
+            "Data Scientists"
+          ],
+          "relevance": [
+            true
+          ],
+          "precision@5": 1.0,
+          "hit@5": true,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "ret-colloquial-title",
+          "target_role": "SWE",
+          "retrieved_titles": [
+            "Backend Developer",
+            "Backend Developer",
+            "Software Engineer",
+            "Software Engineer",
+            "Software Engineer"
+          ],
+          "relevance": [
+            true,
+            true,
+            false,
+            false,
+            false
+          ],
+          "precision@5": 0.4,
+          "hit@5": true,
+          "reciprocal_rank": 1.0
+        },
+        {
+          "id": "ret-non-tech",
+          "target_role": "Registered Nurses",
+          "retrieved_titles": [
+            "Health Informatics Specialists",
+            "Clinical Data Managers",
+            "AI Specialist",
+            "Data Analyst",
+            "Biostatistician"
+          ],
+          "relevance": [
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "precision@5": 0.0,
+          "hit@5": false,
+          "reciprocal_rank": 0.0
+        }
+      ],
+      "seconds": 210.3
+    }
+  }
+}

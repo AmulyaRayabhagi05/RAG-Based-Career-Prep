@@ -35,7 +35,7 @@ load_dotenv(find_dotenv())
 
 from llm import LLM_PROVIDER, model_name
 from evals.judge import INTERVIEW_FEEDBACK_RUBRIC, RESUME_BULLET_RUBRIC, LLMJudge
-from evals.metrics import hit_at_k, precision_at_k, reciprocal_rank, safe_mean, set_precision_recall_f1
+from evals.metrics import agreement_rate, hit_at_k, precision_at_k, reciprocal_rank, safe_mean, set_precision_recall_f1
 
 EVAL_DIR = os.path.dirname(os.path.abspath(__file__))
 GOLDEN_PATH = os.path.join(EVAL_DIR, "golden_set.json")
@@ -72,7 +72,10 @@ def eval_routing(cases: List[dict], judge: LLMJudge) -> dict:
     }
 
 
-# ── Suite 2: retrieval (judge labels each retrieved chunk relevant / not) ──
+# ── Suite 2: retrieval (human labels + judge labels for each retrieved chunk) ──
+# Human labels come from `relevant_titles` in the golden set and are the source of truth.
+# Judge labels are reported alongside, plus their agreement with humans, so we can see
+# whether the judge is trustworthy enough to use on cases nobody has labelled.
 
 def eval_retrieval(cases: List[dict], judge: LLMJudge) -> dict:
     from rag.retriever import jobs_collection, retrieve_for_resume
@@ -84,24 +87,32 @@ def eval_retrieval(cases: List[dict], judge: LLMJudge) -> dict:
     for case in cases:
         chunks = retrieve_for_resume(case["profile"], target_title=case["target_role"])["job_chunks"][:RETRIEVAL_K]
         query = f"Target role: {case['target_role']}. Student profile: {case['profile']}"
-        labels = [judge.is_relevant(query, c["text"]).relevant for c in chunks]
+        human = [c["title"] in set(case.get("relevant_titles", [])) for c in chunks]
+        judged = [judge.is_relevant(query, c["text"]).relevant for c in chunks]
         row = {
             "id": case["id"],
             "target_role": case["target_role"],
             "retrieved_titles": [c["title"] for c in chunks],
-            "relevance": labels,
-            f"precision@{RETRIEVAL_K}": precision_at_k(labels, RETRIEVAL_K),
-            f"hit@{RETRIEVAL_K}": hit_at_k(labels, RETRIEVAL_K),
-            "reciprocal_rank": reciprocal_rank(labels),
+            "human_relevance": human,
+            "judge_relevance": judged,
+            f"precision@{RETRIEVAL_K}": precision_at_k(human, RETRIEVAL_K),
+            f"hit@{RETRIEVAL_K}": hit_at_k(human, RETRIEVAL_K),
+            "reciprocal_rank": reciprocal_rank(human),
+            f"judge_precision@{RETRIEVAL_K}": precision_at_k(judged, RETRIEVAL_K),
+            "judge_human_agreement": agreement_rate(judged, human),
         }
         rows.append(row)
-        print(f"  {case['id']:<22} P@{RETRIEVAL_K}={row[f'precision@{RETRIEVAL_K}']:.2f} RR={row['reciprocal_rank']:.2f} titles={row['retrieved_titles'][:3]}")
+        print(f"  {case['id']:<22} P@{RETRIEVAL_K}={row[f'precision@{RETRIEVAL_K}']:.2f} "
+              f"(judge {row[f'judge_precision@{RETRIEVAL_K}']:.2f}, agree {row['judge_human_agreement']:.2f}) "
+              f"RR={row['reciprocal_rank']:.2f} titles={row['retrieved_titles']}")
 
     return {
         "summary": {
             f"mean_precision@{RETRIEVAL_K}": safe_mean(r[f"precision@{RETRIEVAL_K}"] for r in rows),
             f"hit_rate@{RETRIEVAL_K}": safe_mean(1.0 if r[f"hit@{RETRIEVAL_K}"] else 0.0 for r in rows),
             "MRR": safe_mean(r["reciprocal_rank"] for r in rows),
+            f"judge_mean_precision@{RETRIEVAL_K}": safe_mean(r[f"judge_precision@{RETRIEVAL_K}"] for r in rows),
+            "judge_human_agreement": safe_mean(r["judge_human_agreement"] for r in rows),
         },
         "cases": rows,
     }
@@ -204,7 +215,8 @@ def main() -> None:
     judge = LLMJudge(model=args.judge_model)
     selected = list(SUITES) if args.suite == "all" else [args.suite]
 
-    report: Dict[str, Any] = {"timestamp": datetime.now().isoformat(timespec="seconds"),
+    from rag.retriever import RERANK_ENABLED
+    report: Dict[str, Any] = {"rerank": RERANK_ENABLED, "timestamp": datetime.now().isoformat(timespec="seconds"),
                               "provider": LLM_PROVIDER,
                               "judge_model": args.judge_model or model_name("large"), "suites": {}}
     for name in selected:

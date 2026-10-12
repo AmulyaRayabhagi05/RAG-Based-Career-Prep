@@ -1,76 +1,342 @@
 {
   "_about": "Hand-labelled evaluation cases. Add a case whenever a bug is found so it can never regress silently.",
-
   "routing": [
     {
       "id": "route-resume-only",
       "query": "Can you rewrite my resume bullets for a data analyst role?",
-      "profile": {"major": "Statistics", "skills": ["SQL", "Excel", "Python"], "target_job": "Data Analyst"},
-      "expected_modules": ["resume_builder"]
+      "profile": {
+        "major": "Statistics",
+        "skills": [
+          "SQL",
+          "Excel",
+          "Python"
+        ],
+        "target_job": "Data Analyst"
+      },
+      "expected_modules": [
+        "resume_builder"
+      ]
     },
     {
       "id": "route-skill-gap-only",
       "query": "What skills am I missing to become a cloud engineer?",
-      "profile": {"major": "Computer Science", "skills": ["Python", "Linux"], "target_job": "Cloud Engineer"},
-      "expected_modules": ["skill_gap"]
+      "profile": {
+        "major": "Computer Science",
+        "skills": [
+          "Python",
+          "Linux"
+        ],
+        "target_job": "Cloud Engineer"
+      },
+      "expected_modules": [
+        "skill_gap"
+      ]
     },
     {
       "id": "route-multi-intent",
       "query": "Find my skill gaps for software engineering and generate resume bullets for it",
-      "profile": {"major": "Computer Science", "skills": ["Python", "Java"], "target_job": "Software Engineer"},
-      "expected_modules": ["skill_gap", "resume_builder"]
+      "profile": {
+        "major": "Computer Science",
+        "skills": [
+          "Python",
+          "Java"
+        ],
+        "target_job": "Software Engineer"
+      },
+      "expected_modules": [
+        "skill_gap",
+        "resume_builder"
+      ]
     },
     {
       "id": "route-interview",
       "query": "I have a behavioral interview next week, help me practice",
-      "profile": {"major": "Business", "skills": ["Communication"], "target_job": "Product Manager"},
-      "expected_modules": ["interview"]
+      "profile": {
+        "major": "Business",
+        "skills": [
+          "Communication"
+        ],
+        "target_job": "Product Manager"
+      },
+      "expected_modules": [
+        "interview"
+      ]
     },
     {
       "id": "route-jobs",
       "query": "Show me internships in Austin that match my profile",
-      "profile": {"major": "Computer Science", "skills": ["React", "Node.js"], "location_preference": ["Austin, TX"]},
-      "expected_modules": ["job_search"]
+      "profile": {
+        "major": "Computer Science",
+        "skills": [
+          "React",
+          "Node.js"
+        ],
+        "location_preference": [
+          "Austin, TX"
+        ]
+      },
+      "expected_modules": [
+        "job_search"
+      ]
     },
     {
       "id": "route-grad",
       "query": "Which master's programs am I competitive for with a 3.6 GPA?",
-      "profile": {"major": "Electrical Engineering", "gpa": 3.6, "coursework": ["Signals and Systems"]},
-      "expected_modules": ["grad_school"]
+      "profile": {
+        "major": "Electrical Engineering",
+        "gpa": 3.6,
+        "coursework": [
+          "Signals and Systems"
+        ]
+      },
+      "expected_modules": [
+        "grad_school"
+      ]
     },
     {
       "id": "route-three-way",
       "query": "I want to become an ML engineer: what am I missing, what jobs are open, and how do I prep for interviews?",
-      "profile": {"major": "Computer Science", "skills": ["Python", "PyTorch"], "target_job": "Machine Learning Engineer"},
-      "expected_modules": ["skill_gap", "job_search", "interview"]
+      "profile": {
+        "major": "Computer Science",
+        "skills": [
+          "Python",
+          "PyTorch"
+        ],
+        "target_job": "Machine Learning Engineer"
+      },
+      "expected_modules": [
+        "skill_gap",
+        "job_search",
+        "interview"
+      ]
     },
     {
       "id": "route-indirect-phrasing",
       "query": "Recruiters keep ignoring my applications for security analyst roles, what should I fix on my CV?",
-      "profile": {"major": "Information Systems", "skills": ["Networking", "Splunk"], "target_job": "Information Security Analyst"},
-      "expected_modules": ["resume_builder"]
+      "profile": {
+        "major": "Information Systems",
+        "skills": [
+          "Networking",
+          "Splunk"
+        ],
+        "target_job": "Information Security Analyst"
+      },
+      "expected_modules": [
+        "resume_builder"
+      ]
     }
   ],
-
   "retrieval": [
-    {"id": "ret-exact-title", "target_role": "Software Developers",
-     "profile": {"skills": ["Python", "Git", "REST APIs"], "coursework": ["Data Structures"], "major": "Computer Science"}},
-    {"id": "ret-data-science", "target_role": "Data Scientists",
-     "profile": {"skills": ["Python", "Machine Learning", "SQL"], "coursework": ["Statistics"], "major": "Mathematics"}},
-    {"id": "ret-colloquial-title", "target_role": "SWE",
-     "profile": {"skills": ["Java", "Spring", "Docker"], "major": "Computer Science"},
-     "_note": "Not an O*NET title: exercises the semantic-search fallback in query_jobs()."},
-    {"id": "ret-non-tech", "target_role": "Registered Nurses",
-     "profile": {"skills": ["Patient Care", "CPR"], "coursework": ["Anatomy"], "major": "Nursing"}}
+    {
+      "id": "ret-exact-title",
+      "target_role": "Software Developers",
+      "profile": {
+        "skills": [
+          "Python",
+          "Git",
+          "REST APIs"
+        ],
+        "coursework": [
+          "Data Structures"
+        ],
+        "major": "Computer Science"
+      },
+      "relevant_titles": [
+        "Software Engineer",
+        "Software Developer",
+        "Software Developers",
+        "Backend Developer",
+        "Front-end Developer",
+        "Full Stack Developer",
+        "Computer Programmers",
+        "Web Developers",
+        "Mobile Developer"
+      ]
+    },
+    {
+      "id": "ret-data-science",
+      "target_role": "Data Scientists",
+      "profile": {
+        "skills": [
+          "Python",
+          "Machine Learning",
+          "SQL"
+        ],
+        "coursework": [
+          "Statistics"
+        ],
+        "major": "Mathematics"
+      },
+      "relevant_titles": [
+        "Data Scientists",
+        "Data Scientist",
+        "Machine Learning Engineer",
+        "Deep Learning Engineer",
+        "Statisticians",
+        "Data Analyst",
+        "Data Engineer",
+        "AI Researcher",
+        "AI Specialist",
+        "NLP Engineer",
+        "Research Scientist"
+      ]
+    },
+    {
+      "id": "ret-colloquial-title",
+      "target_role": "SWE",
+      "profile": {
+        "skills": [
+          "Java",
+          "Spring",
+          "Docker"
+        ],
+        "major": "Computer Science"
+      },
+      "_note": "Not an O*NET title: exercises the semantic-search fallback in query_jobs().",
+      "relevant_titles": [
+        "Software Engineer",
+        "Software Developer",
+        "Software Developers",
+        "Backend Developer",
+        "Front-end Developer",
+        "Full Stack Developer",
+        "Computer Programmers",
+        "Web Developers",
+        "Mobile Developer",
+        "DevOps Engineer",
+        "Cloud Engineer",
+        "Embedded Systems Engineer"
+      ]
+    },
+    {
+      "id": "ret-non-tech",
+      "target_role": "Registered Nurses",
+      "profile": {
+        "skills": [
+          "Patient Care",
+          "CPR"
+        ],
+        "coursework": [
+          "Anatomy"
+        ],
+        "major": "Nursing"
+      },
+      "relevant_titles": [],
+      "_note": "No nursing occupation exists in the index, so nothing retrieved can be relevant: a data-coverage case."
+    },
+    {
+      "id": "ret-ml-abbrev",
+      "target_role": "ML engineer",
+      "profile": {
+        "skills": [
+          "Python",
+          "PyTorch",
+          "Deep Learning"
+        ],
+        "coursework": [
+          "Machine Learning"
+        ],
+        "major": "Computer Science"
+      },
+      "relevant_titles": [
+        "Machine Learning Engineer",
+        "Deep Learning Engineer",
+        "NLP Engineer",
+        "AI Researcher",
+        "AI Specialist",
+        "Data Scientist",
+        "Data Scientists",
+        "Research Scientist"
+      ]
+    },
+    {
+      "id": "ret-security",
+      "target_role": "Security Engineer",
+      "profile": {
+        "skills": [
+          "Networking",
+          "Splunk",
+          "Python",
+          "Incident Response"
+        ],
+        "major": "Information Systems"
+      },
+      "relevant_titles": [
+        "Information Security Engineers",
+        "Information Security Analysts",
+        "Cybersecurity Analyst",
+        "Cybersecurity Specialist",
+        "Penetration Testers",
+        "Digital Forensics Analysts",
+        "Network and Computer Systems Administrators",
+        "Computer Network Architects"
+      ]
+    },
+    {
+      "id": "ret-ui",
+      "target_role": "UI engineer",
+      "profile": {
+        "skills": [
+          "React",
+          "CSS",
+          "Figma",
+          "TypeScript"
+        ],
+        "major": "Computer Science"
+      },
+      "relevant_titles": [
+        "Front-end Developer",
+        "Web Developers",
+        "Web and Digital Interface Designers",
+        "UX Designer",
+        "Full Stack Developer",
+        "Mobile Developer",
+        "Software Developer",
+        "Software Developers",
+        "Software Engineer"
+      ]
+    }
   ],
-
   "resume": [
-    {"id": "resume-cs", "target_role": "Software Developers",
-     "profile": {"skills": ["Python", "React", "PostgreSQL"], "coursework": ["Databases"], "projects": ["Course scheduling web app"], "major": "Computer Science", "target_role": "Software Developers"}},
-    {"id": "resume-data", "target_role": "Data Scientists",
-     "profile": {"skills": ["Python", "Pandas", "Scikit-learn"], "coursework": ["Machine Learning"], "projects": ["Churn prediction model"], "major": "Statistics", "target_role": "Data Scientists"}}
+    {
+      "id": "resume-cs",
+      "target_role": "Software Developers",
+      "profile": {
+        "skills": [
+          "Python",
+          "React",
+          "PostgreSQL"
+        ],
+        "coursework": [
+          "Databases"
+        ],
+        "projects": [
+          "Course scheduling web app"
+        ],
+        "major": "Computer Science",
+        "target_role": "Software Developers"
+      }
+    },
+    {
+      "id": "resume-data",
+      "target_role": "Data Scientists",
+      "profile": {
+        "skills": [
+          "Python",
+          "Pandas",
+          "Scikit-learn"
+        ],
+        "coursework": [
+          "Machine Learning"
+        ],
+        "projects": [
+          "Churn prediction model"
+        ],
+        "major": "Statistics",
+        "target_role": "Data Scientists"
+      }
+    }
   ],
-
   "interview": [
     {
       "id": "iv-tell-me",

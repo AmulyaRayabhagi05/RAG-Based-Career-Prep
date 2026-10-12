@@ -44,6 +44,12 @@ def reciprocal_rank(relevance_labels: Sequence[bool]) -> float:
     return 0.0
 
 
+def agreement_rate(labels_a: Sequence[bool], labels_b: Sequence[bool]) -> float:
+    """Judge calibration: fraction of items where the LLM judge agrees with human labels."""
+    pairs = list(zip(labels_a, labels_b))
+    return round(sum(a == b for a, b in pairs) / len(pairs), 3) if pairs else 0.0
+
+
 def safe_mean(values: Iterable[float]) -> float:
     values = list(values)
     return round(mean(values), 3) if values else 0.0

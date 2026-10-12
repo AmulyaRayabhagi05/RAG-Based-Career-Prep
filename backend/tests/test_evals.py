@@ -13,7 +13,7 @@ from evals.judge import (
     RelevanceVerdict,
     RubricVerdict,
 )
-from evals.metrics import hit_at_k, precision_at_k, reciprocal_rank, set_precision_recall_f1
+from evals.metrics import agreement_rate, hit_at_k, precision_at_k, reciprocal_rank, set_precision_recall_f1
 from rag.chunking import build_career_rec_chunk, build_onet_chunk, parse_list_field
 
 
@@ -39,6 +39,11 @@ def test_retrieval_metrics():
     assert hit_at_k(labels, 2) is True
     assert reciprocal_rank(labels) == 0.5
     assert reciprocal_rank([False, False]) == 0.0
+
+
+def test_judge_human_agreement():
+    assert agreement_rate([True, False, True, True], [True, True, True, False]) == 0.5
+    assert agreement_rate([], []) == 0.0
 
 
 # ── LLM judge (with a fake model) ──────────────────────────────────────────
@@ -155,3 +160,41 @@ def test_ui_payload_puts_triggered_modules_first():
     card = ui["cards"]["skill_gap"]
     assert card["active"] and card["items"][0]["course_label"] == "SQL 101"
     assert ui["cards"]["resume_builder"]["active"] is False
+
+
+# ── Reranker ([RAG-6 RERANK]) ──────────────────────────────────────────────
+
+class FakeCrossEncoder:
+    """Scores a (query, passage) pair by how many query words appear in the passage."""
+
+    def predict(self, pairs):
+        return [sum(w in passage.lower() for w in query.lower().split()) for query, passage in pairs]
+
+
+def test_rerank_reorders_by_cross_encoder_score_and_truncates():
+    from rag.retriever import rerank_chunks
+
+    stage1 = [  # stage-1 (vector) order: the best match is last
+        {"text": "Job Title: Digital Marketer", "title": "Digital Marketer"},
+        {"text": "Job Title: Data Analyst", "title": "Data Analyst"},
+        {"text": "Job Title: Software Engineer, java", "title": "Software Engineer"},
+    ]
+    top = rerank_chunks("software engineer java", stage1, top_k=2, model=FakeCrossEncoder())
+
+    assert top[0]["title"] == "Software Engineer"
+    assert len(top) == 2
+    assert all("rerank_score" in c for c in top)
+
+
+def test_rerank_handles_empty_candidates():
+    from rag.retriever import rerank_chunks
+
+    assert rerank_chunks("anything", [], top_k=5, model=FakeCrossEncoder()) == []
+
+
+def test_role_abbreviations_are_expanded():
+    from rag.retriever import expand_role
+
+    assert expand_role("SWE") == "software engineer"
+    assert expand_role(" ml engineer ") == "machine learning engineer"
+    assert expand_role("Data Scientists") == "Data Scientists"  # unknown titles pass through
